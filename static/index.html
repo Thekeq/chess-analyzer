@@ -42,6 +42,9 @@
   .mygames li:hover { background: #3c3a37; } .mygames li.on { outline: 2px solid #81b64c; }
   .mygames li div { min-width: 0; } .mygames li b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .mygames li small { color: var(--muted); }
+  .pager { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .pager button { flex: 1; background: #3c3a37; padding: 6px; font-size: 13px; }
+  .pager span { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .res { flex: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font-weight: 800; color: #fff; }
   .res.w { background: #81b64c; } .res.l { background: #fa412d; } .res.d { background: #777; }
   @media (max-width: 1360px) { .mygames { width: min(100%, 1084px); } .mygames ul { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
@@ -382,7 +385,10 @@ $('go').onclick = () => run($('input').value);
 let account = JSON.parse(localStorage.account || 'null');
 const SITE = { chesscom: 'chess.com', lichess: 'lichess' };
 
-async function loadMyGames() {
+let gamesPage = 0;
+
+async function loadMyGames(page = gamesPage) {
+  gamesPage = page;
   const box = $('mygames');
   $('acctbtn').textContent = account ? '👤 ' + account.user : 'Аккаунт';
   if (!account) {
@@ -391,9 +397,9 @@ async function loadMyGames() {
   }
   const top = `<div class="top">Мои партии <small>${esc(SITE[account.site])}</small><button id="reload" title="Обновить">↻</button></div>`;
   box.innerHTML = top + '<div class="hint">Загрузка…</div>';
-  let list;
+  let list, more;
   try {
-    list = await api(`/api/games/${account.site}/${encodeURIComponent(account.user)}`);
+    ({ games: list, more } = await api(`/api/games/${account.site}/${encodeURIComponent(account.user)}?page=${page}`));
   } catch (e) {
     box.innerHTML = top + `<div class="hint">${esc(e.message)}</div>`;
     return;
@@ -409,9 +415,13 @@ async function loadMyGames() {
       <span class="res ${g.res}">${{ w: 'В', l: 'П', d: 'Н' }[g.res]}</span>
       <div><b>${g.black ? '♚' : '♔'} ${esc(g.opp)} ${g.elo ? `(${g.elo})` : ''}</b>
       <small>${esc(g.speed || '')} · ${new Date(g.end * 1000).toLocaleDateString('ru')}</small></div></li>`).join('')}</ul>`
-    : '<div class="hint">Партий не найдено</div>');
+    : '<div class="hint">Партий не найдено</div>') +
+    `<div class="pager"><button data-p="-1" ${page ? '' : 'disabled'}>‹ Новее</button><span>стр. ${page + 1}</span>` +
+    `<button data-p="1" ${more ? '' : 'disabled'}>Старее ›</button></div>`;
   box.onclick = e => {
-    if (e.target.id === 'reload') return loadMyGames();
+    if (e.target.id === 'reload') return loadMyGames(0);
+    const p = e.target.closest('.pager button');
+    if (p) return loadMyGames(gamesPage + +p.dataset.p);
     const li = e.target.closest('li');
     if (!li || $('go').disabled) return;
     box.querySelectorAll('li.on').forEach(x => x.classList.remove('on'));
@@ -433,7 +443,7 @@ $('acct').onclose = () => {
   else if (v === 'logout') account = null;
   else return;
   localStorage.account = JSON.stringify(account);
-  loadMyGames();
+  loadMyGames(0);
 };
 loadMyGames();
 $('summary').onclick = e => {

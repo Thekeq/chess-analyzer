@@ -62,39 +62,47 @@ def report():
     return jsonify(build_report(data["pgn"], data["evals"]))
 
 
+PAGE = 5
+
+
 @app.get("/api/games/<site>/<user>")
 def user_games(site, user):
-    """Last 5 standard games of a chess.com or lichess player."""
-    if site not in ("chesscom", "lichess") or not re.fullmatch(r"[A-Za-z0-9_-]{2,30}", user):
+    """Standard games of a chess.com or lichess player, newest first, PAGE per page (?page=0,1,...)."""
+    page = request.args.get("page", 0, type=int)
+    if site not in ("chesscom", "lichess") or not re.fullmatch(r"[A-Za-z0-9_-]{2,30}", user) or not 0 <= page < 100:
         abort(400)
+    need = (page + 1) * PAGE + 1  # one extra tells whether an older page exists
+
     if site == "lichess":
-        ndjson = fetch(f"https://lichess.org/api/games/user/{user}?max=10&pgnInJson=true&clocks=false&evals=false",
-                       "application/x-ndjson")
-        games = [json.loads(line) for line in ndjson.splitlines() if line]
+        perfs = "ultraBullet,bullet,blitz,rapid,classical,correspondence"  # standard chess only
+        ndjson = fetch(f"https://lichess.org/api/games/user/{user}?max={need}&perfType={perfs}"
+                       "&pgnInJson=true&clocks=false&evals=false", "application/x-ndjson")
         player = lambda g, c: g["players"][c].get("user", {}).get("name") or f'Stockfish {g["players"][c].get("aiLevel", "")}'
-        return jsonify([
+        games = [
             {"white": player(g, "white"), "black": player(g, "black"),
              "white_elo": g["players"]["white"].get("rating"), "black_elo": g["players"]["black"].get("rating"),
              "winner": g.get("winner"), "speed": g.get("speed"), "end": g["lastMoveAt"] // 1000, "pgn": g["pgn"]}
-            for g in games if g.get("variant") == "standard" and g.get("pgn")
-        ][:5])
+            for g in map(json.loads, filter(None, ndjson.splitlines())) if g.get("pgn")
+        ]
+    else:
+        winner = lambda g: "white" if g["white"]["result"] == "win" else "black" if g["black"]["result"] == "win" else None
+        archives = json.loads(fetch(f"https://api.chess.com/pub/player/{user.lower()}/games/archives"))["archives"]
+        games = []
+        for url in reversed(archives):  # ponytail: refetches past months per page, cache them if paging gets slow
+            try:
+                month = json.loads(fetch(url))["games"]
+            except urllib.error.HTTPError:  # chess.com sometimes 404s a listed (current) month
+                continue
+            games += [
+                {"white": g["white"]["username"], "black": g["black"]["username"],
+                 "white_elo": g["white"].get("rating"), "black_elo": g["black"].get("rating"),
+                 "winner": winner(g), "speed": g.get("time_class"), "end": g["end_time"], "pgn": g["pgn"]}
+                for g in reversed(month) if g.get("pgn") and g.get("rules") == "chess"
+            ]
+            if len(games) >= need:
+                break
 
-    archives = json.loads(fetch(f"https://api.chess.com/pub/player/{user.lower()}/games/archives"))["archives"]
-    games = []
-    for url in reversed(archives[-3:]):
-        try:
-            games += reversed(json.loads(fetch(url))["games"])
-        except urllib.error.HTTPError:  # chess.com sometimes 404s a listed (current) month
-            continue
-        if len(games) >= 10:
-            break
-    winner = lambda g: "white" if g["white"]["result"] == "win" else "black" if g["black"]["result"] == "win" else None
-    return jsonify([
-        {"white": g["white"]["username"], "black": g["black"]["username"],
-         "white_elo": g["white"].get("rating"), "black_elo": g["black"].get("rating"),
-         "winner": winner(g), "speed": g.get("time_class"), "end": g["end_time"], "pgn": g["pgn"]}
-        for g in games if g.get("pgn") and g.get("rules") == "chess"
-    ][:5])
+    return jsonify(games=games[page * PAGE:(page + 1) * PAGE], more=len(games) > (page + 1) * PAGE)
 
 
 if __name__ == "__main__":
