@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Анализ партии</title>
+<link rel="stylesheet" href="/static/vendor/chessground.base.css">
+<link rel="stylesheet" href="/static/vendor/chessground.brown.css">
+<link rel="stylesheet" href="/static/vendor/chessground.cburnett.css">
+<style>
+  * { box-sizing: border-box; }
+  :root { --bs: max(280px, min(92vw, calc(100vh - 210px), 640px)); --panel: #262522; --line: #3c3a37; --muted: #9b9893; }
+  body { margin: 0; background: #312e2b; color: #e8e6e3; font: 15px system-ui, sans-serif; }
+  textarea, input, button { background: #3c3a37; color: inherit; border: 1px solid #4b4847; border-radius: 6px; padding: 8px 10px; font: inherit; }
+  textarea:focus, input:focus { outline: 2px solid #81b64c; outline-offset: -1px; }
+  button { background: #81b64c; border: 0; font-weight: 700; cursor: pointer; color: #fff; }
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+  button:disabled { opacity: .5; cursor: default; }
+  header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); }
+  .brand { font-weight: 800; font-size: 20px; margin-right: 8px; }
+  .brand span { color: #81b64c; }
+  .load { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
+  .load textarea { flex: 1 1 320px; height: 40px; min-height: 40px; resize: vertical; }
+  #progress { height: 3px; background: transparent; }
+  #progress div { height: 100%; width: 0; background: #81b64c; transition: width .2s; }
+  #status { text-align: center; color: #c9c6c1; min-height: 1.4em; padding: 6px; }
+  #status.err { color: #fa7a6a; }
+  #acctbtn { background: #3c3a37; white-space: nowrap; }
+  dialog { background: var(--panel); color: inherit; border: 1px solid #4b4847; border-radius: 10px; padding: 18px; width: min(92vw, 340px); }
+  dialog::backdrop { background: #0009; }
+  dialog h3 { margin: 0 0 12px; }
+  dialog .sites { display: flex; gap: 16px; margin-bottom: 10px; }
+  dialog input[name=user] { width: 100%; }
+  dialog menu { display: flex; gap: 8px; padding: 0; margin: 14px 0 0; } dialog menu button { flex: 1; }
+  button.ghost { background: #3c3a37; }
+  .mygames { width: 250px; padding: 10px; }
+  .mygames .top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-weight: 700; }
+  .mygames .top small { color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mygames .top button { margin-left: auto; background: none; padding: 2px 6px; font-size: 16px; }
+  .mygames ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .mygames li { display: flex; gap: 8px; align-items: center; padding: 8px; border-radius: 6px; background: #2f2d2a; cursor: pointer; }
+  .mygames li:hover { background: #3c3a37; } .mygames li.on { outline: 2px solid #81b64c; }
+  .mygames li div { min-width: 0; } .mygames li b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .mygames li small { color: var(--muted); }
+  .res { flex: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font-weight: 800; color: #fff; }
+  .res.w { background: #81b64c; } .res.l { background: #fa412d; } .res.d { background: #777; }
+  @media (max-width: 1360px) { .mygames { width: min(100%, 1084px); } .mygames ul { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
+  main { display: flex; gap: 16px; padding: 8px 16px 16px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+  .pbar { display: flex; align-items: center; gap: 8px; height: 32px; padding-left: 28px; font-weight: 600; }
+  .pbar .elo { color: var(--muted); font-weight: 400; }
+  .pbar i { width: 20px; height: 20px; border-radius: 4px; box-shadow: inset 0 0 0 1px #0004; }
+  .boardbox { display: flex; gap: 6px; }
+  #evalbar { position: relative; width: 22px; background: #403d39; border-radius: 3px; overflow: hidden; display: flex; flex-direction: column-reverse; }
+  #evalbar.flip { flex-direction: column; }
+  #evalw { background: #f0f0f0; height: 50%; transition: height .4s; }
+  #evtxt { position: absolute; left: 0; right: 0; text-align: center; font-size: 10px; font-weight: 800; }
+  #evtxt.bot { bottom: 4px; color: #333; } #evtxt.top { top: 4px; color: #eee; }
+  #wrap { position: relative; width: var(--bs); height: var(--bs); flex: none; container-type: inline-size; }
+  #board { width: 100%; height: 100%; }
+  #wrap coords { font-size: max(10px, 1.9cqi); font-weight: 700; opacity: 1; }
+  #wrap coords coord { flex: 1 1 0; }
+  #wrap coords.ranks { top: 0; left: 3px; } #wrap coords.ranks coord { transform: none; padding-top: 2px; }
+  #wrap coords.files { left: 0; bottom: 0; height: auto; } #wrap coords.files coord { text-align: right; padding: 0 3px 1px 0; }
+  #wrap cg-board square.last-move { background-color: var(--hl, rgba(155, 199, 0, .41)); }
+  .badge { position: absolute; z-index: 5; width: 5.4cqi; height: 5.4cqi; border-radius: 50%; display: grid; place-items: center;
+           translate: -60% -40%; color: #fff; font-weight: 800; font-size: 2.5cqi; box-shadow: 0 1px 3px #0009;
+           pointer-events: none; animation: pop .35s ease-out; }
+  .badge.brilliant, .badge.great { animation: pop .35s ease-out, glow 1s ease-out .3s 2; }
+  .flash { position: absolute; z-index: 4; width: 12.5%; height: 12.5%; pointer-events: none; animation: flash 1.2s ease-out forwards; }
+  @keyframes pop { 0% { scale: 0; } 70% { scale: 1.4; } 100% { scale: 1; } }
+  @keyframes glow { from { box-shadow: 0 0 0 0 var(--c); } to { box-shadow: 0 0 0 3cqi transparent; } }
+  @keyframes flash { 0% { opacity: .9; scale: .6; } 40% { opacity: .7; scale: 1.15; } 100% { opacity: 0; scale: 1; } }
+  .side { width: min(calc(92vw + 28px), 400px); max-height: calc(var(--bs) + 64px); display: flex; flex-direction: column; gap: 8px; }
+  .card { background: var(--panel); border-radius: 8px; padding: 12px; }
+  .card:empty, #moves:empty { display: none; }
+  .hint { color: var(--muted); line-height: 1.5; }
+  .ic { display: inline-grid; place-items: center; width: 1.45em; height: 1.45em; border-radius: 50%; color: #fff; flex: none;
+        font-style: normal; font-weight: 800; font-size: .75em; margin-right: 4px; vertical-align: middle; }
+  .ic svg, .badge svg { width: 68%; height: 68%; fill: currentColor; }
+  .players { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; text-align: center; gap: 8px; }
+  .players .lbl { color: var(--muted); padding-bottom: 8px; }
+  .players .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acc { font-size: 24px; font-weight: 800; margin-top: 4px; padding: 2px 8px; border-radius: 6px; }
+  .acc.w { background: #f0f0f0; color: #222; }
+  .acc.b { background: #111; }
+  .opening { color: var(--muted); text-align: center; margin: 10px 0 6px; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 2px 4px; } td:first-child, td:last-child { text-align: center; width: 3em; font-weight: 700; }
+  td.jump { cursor: pointer; border-radius: 4px; } td.jump:hover { background: #3c3a37; text-decoration: underline; }
+  #comment { flex: none; }
+  #comment .head { display: flex; align-items: center; gap: 4px; font-size: 16px; }
+  #comment .ev { margin-left: auto; font-weight: 700; color: #ccc; background: #3c3a37; padding: 2px 8px; border-radius: 4px; font-size: 14px; }
+  #comment .best { margin-top: 6px; color: var(--muted); }
+  #moves { position: relative; flex: 1; min-height: 120px; overflow: auto; display: grid; grid-template-columns: 2.6em 1fr 1fr; align-content: start; padding: 6px; }
+  #moves .no { color: #8b8987; padding: 4px 0 4px 6px; }
+  .mv { padding: 4px 6px; cursor: pointer; border-radius: 4px; white-space: nowrap; }
+  .mv:hover { background: #3c3a37; } .mv.cur { background: #4b4847; font-weight: 700; }
+  .nav { display: flex; gap: 6px; flex: none; } .nav button { flex: 1; background: #3c3a37; font-size: 18px; padding: 10px; }
+  @media (max-width: 900px) {
+    .side { max-height: none; } #moves { max-height: 300px; } #comment, .nav { order: -1; }
+    header { padding: 10px; flex-direction: column; align-items: stretch; } .load > * { flex: 1 1 auto; } .load textarea { flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Chess<span>Analyze</span></div>
+  <div class="load">
+    <textarea id="input" placeholder="Вставьте PGN или ссылку на партию lichess.org"></textarea>
+    <button id="go">Анализировать</button>
+    <button id="acctbtn">Аккаунт</button>
+  </div>
+</header>
+<div id="progress"><div></div></div>
+<div id="status"></div>
+<dialog id="acct">
+  <form method="dialog">
+    <h3>Мой аккаунт</h3>
+    <div class="sites">
+      <label><input type="radio" name="site" value="chesscom" checked> chess.com</label>
+      <label><input type="radio" name="site" value="lichess"> lichess</label>
+    </div>
+    <input name="user" placeholder="Ник" required pattern="[A-Za-z0-9_\-]{2,30}" autocomplete="off">
+    <menu>
+      <button value="save">Сохранить</button>
+      <button value="logout" class="ghost" formnovalidate>Выйти</button>
+      <button value="cancel" class="ghost" formnovalidate>Отмена</button>
+    </menu>
+  </form>
+</dialog>
+<main>
+  <aside class="card mygames" id="mygames"></aside>
+  <section>
+    <div class="pbar" id="ptop"></div>
+    <div class="boardbox">
+      <div id="evalbar"><div id="evalw"></div><span id="evtxt"></span></div>
+      <div id="wrap"><div id="board"></div></div>
+    </div>
+    <div class="pbar" id="pbot"></div>
+  </section>
+  <aside class="side">
+    <div class="card hint" id="summary">Выберите партию слева (кнопка «Аккаунт» — ваш ник chess.com или lichess) или вставьте PGN / ссылку lichess сверху.<br>Stockfish 17 проанализирует её прямо в браузере.</div>
+    <div class="card" id="comment"></div>
+    <div class="card" id="moves"></div>
+    <div class="nav">
+      <button data-d="-999" title="В начало (Home)">⏮</button><button data-d="-1" title="Назад (←)">◀</button><button data-d="1" title="Вперёд (→)">▶</button><button data-d="999" title="В конец (End)">⏭</button><button id="flip" title="Перевернуть (F)">⇅</button><button id="mute" title="Звук (M)">🔊</button>
+    </div>
+  </aside>
+</main>
+<script type="module">
+import { Chessground } from '/static/vendor/chessground.min.js';
+
+const svg = d => `<svg viewBox="0 0 24 24"><path d="${d}"/></svg>`;
+const CLS = {
+  brilliant: ['Блестящий', '!!', '#26c2a3'],
+  great: ['Замечательный', '!', '#749bbf'],
+  book: ['Теоретический', svg('M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z'), '#a88865'],
+  best: ['Лучший', '★', '#81b64c'],
+  excellent: ['Отличный', svg('M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z'), '#81b64c'],
+  good: ['Неплохой', '✓', '#95b776'],
+  inaccuracy: ['Неточность', '?!', '#f7c631'],
+  mistake: ['Ошибка', '?', '#ffa459'],
+  miss: ['Упущенный шанс', '✗', '#ff7769'],
+  blunder: ['Зевок', '??', '#fa412d'],
+};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const icon = cls => `<i class="ic ${cls}" style="background:${CLS[cls][2]}">${CLS[cls][1]}</i>`;
+const status = (text, err) => { $('status').textContent = text; $('status').className = err ? 'err' : ''; };
+const progress = frac => $('progress').firstElementChild.style.width = frac * 100 + '%';
+
+async function api(url, body) {
+  const r = await fetch(url, body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `Ошибка сервера (${r.status})`);
+  return j;
+}
+
+// --- Stockfish (WASM, работает у пользователя, сервер не грузит)
+// Полный многопоточный движок (79 МБ, кэшируется) на компьютерах; облегчённый — на телефонах и слабых машинах.
+const cores = navigator.hardwareConcurrency || 1;
+const FULL = self.crossOriginIsolated && cores >= 4 && !/Mobi|Android/i.test(navigator.userAgent);
+const ENGINE = FULL
+  // 2 потока: ПК остаётся свободным. Больше потоков/времени — сильнее анализ, но выше нагрузка.
+  ? { file: 'stockfish-17.1-8e4d048.js', go: 'go depth 22 movetime 500', threads: 2, hash: 64, name: 'Stockfish 17.1' }
+  : { file: 'stockfish-17.1-lite-single-03e3232.js', go: 'go depth 14', threads: 1, hash: 32, name: 'Stockfish 17.1 lite' };
+// go: сила анализа. Меняешь — проверь точность против chess.com (константы ACC_* в analysis.py)
+const sf = new Worker('/static/engine/' + ENGINE.file);
+let onLine = () => {};
+sf.onmessage = e => onLine(e.data);
+const send = s => sf.postMessage(s);
+const ready = new Promise(res => onLine = l => l === 'readyok' && res());
+['uci', `setoption name Threads value ${ENGINE.threads}`, `setoption name Hash value ${ENGINE.hash}`,
+  'setoption name MultiPV value 2', 'isready'].forEach(send);
+
+function evalFen(fen) {
+  const lines = [];
+  const done = new Promise(res => onLine = l => {
+    const m = l.match(/ multipv (\d) .*?score (cp|mate) (-?\d+).*? pv (\S+)/);
+    if (m) lines[m[1] - 1] = { [m[2]]: +m[3], move: m[4] };
+    else if (l.startsWith('bestmove')) res(lines);
+  });
+  send('position fen ' + fen);
+  send(ENGINE.go);
+  return done;
+}
+
+async function analyse(fens) {
+  await ready;
+  send('ucinewgame');
+  const evals = [];
+  for (const [i, fen] of fens.entries()) {
+    status(`${ENGINE.name} (${ENGINE.threads} пот.): позиция ${i + 1} из ${fens.length}`);
+    progress(i / fens.length);
+    const [a, b] = await evalFen(fen);
+    const s = fen.split(' ')[1] === 'w' ? 1 : -1; // движок даёт оценку за ходящего, храним за белых
+    const pov = x => x && ('cp' in x ? { cp: x.cp * s } : { mate: x.mate * s });
+    evals.push(a ? { best: a.move, ...pov(a), second: pov(b) || null } : null);
+  }
+  return evals;
+}
+
+// --- Доска
+let R = null, ply = 0, flipped = false;
+const cg = Chessground($('board'), { viewOnly: true, animation: { duration: 250 } });
+new ResizeObserver(() => cg.redrawAll()).observe($('wrap'));
+const evalText = (sc, m) => m?.san.endsWith('#') ? (sc.wp > .5 ? '1-0' : '0-1')
+  : 'mate' in sc ? 'M' + Math.abs(sc.mate) : (Math.abs(sc.cp) / 100).toFixed(1);
+
+// --- Звуки
+const SND = Object.fromEntries(['move-self', 'move-opponent', 'move-check', 'capture', 'castle',
+  'promote', 'game-end', 'game-start', 'brilliant-move']
+  .map(n => [n, new Audio(`/static/sounds/${n}.mp3`)]));
+let muted = localStorage.muted === '1';
+const play = name => {
+  if (muted) return;
+  const a = SND[name];
+  a.currentTime = 0;
+  a.play().catch(() => {}); // браузер блокирует звук до первого клика — не страшно
+};
+function moveSound({ san, fen }) {
+  const who = (fen.split(' ')[1] === 'b') !== flipped ? 'self' : 'opponent'; // «свой» ход — за сторону снизу доски
+  return san.includes('#') ? 'game-end' : san.includes('+') ? 'move-check' : san.includes('=') ? 'promote'
+    : san.startsWith('O-O') ? 'castle' : san.includes('x') ? 'capture' : `move-${who}`;
+}
+function setMuted(v) {
+  muted = v;
+  localStorage.muted = v ? '1' : '0';
+  $('mute').textContent = v ? '🔇' : '🔊';
+}
+
+function go(n) {
+  if (!R) return;
+  const prev = ply;
+  ply = Math.max(0, Math.min(R.moves.length, n));
+  const m = R.moves[ply - 1], fen = m ? m.fen : R.start_fen;
+  if (m && ply !== prev) {
+    play(moveSound(m));
+    if (m.cls === 'brilliant') setTimeout(() => play('brilliant-move'), 150);
+  }
+  cg.set({
+    fen, lastMove: m && [m.uci.slice(0, 2), m.uci.slice(2, 4)],
+    turnColor: fen.split(' ')[1] === 'w' ? 'white' : 'black', check: !!m && /[+#]$/.test(m.san),
+  });
+  cg.setAutoShapes(m?.best_uci ? [{ orig: m.best_uci.slice(0, 2), dest: m.best_uci.slice(2, 4), brush: 'green' }] : []);
+
+  const wrap = $('wrap');
+  wrap.querySelectorAll('.badge, .flash').forEach(e => e.remove());
+  const sc = R.scores[ply];
+  $('evalw').style.height = sc.wp * 100 + '%';
+  $('evtxt').textContent = evalText(sc, m);
+  $('evtxt').className = (sc.wp >= .5) !== flipped ? 'bot' : 'top';
+  document.querySelectorAll('.mv.cur').forEach(e => e.classList.remove('cur'));
+  if (!m) { $('comment').innerHTML = '<span class="hint">Начальная позиция — листайте стрелками ← →</span>'; return; }
+
+  const [name, sym, color] = CLS[m.cls];
+  const f = m.uci.charCodeAt(2) - 97, r = +m.uci[3] - 1;
+  const x = flipped ? 7 - f : f, y = flipped ? r : 7 - r;
+  wrap.style.setProperty('--hl', color + '99');
+  const badge = Object.assign(document.createElement('div'), { className: 'badge ' + m.cls, innerHTML: sym });
+  badge.style.cssText = `left:${(x + 1) * 12.5}%;top:${y * 12.5}%;background:${color};--c:${color}`;
+  wrap.append(badge);
+  if (m.cls === 'brilliant' || m.cls === 'great') {
+    const fl = document.createElement('div');
+    fl.className = 'flash';
+    fl.style.cssText = `left:${x * 12.5}%;top:${y * 12.5}%;background:radial-gradient(${color}, transparent 70%)`;
+    wrap.append(fl);
+  }
+
+  const sign = m.san.endsWith('#') ? '' : sc.wp >= .5 ? '+' : '−';
+  const no = Math.ceil(ply / 2) + (ply % 2 ? '. ' : '… ');
+  $('comment').innerHTML = `<div class="head">${icon(m.cls)}<b>${no}${m.san}</b>&nbsp;—&nbsp;<span style="color:${color}">${name}</span>` +
+    `<span class="ev">${sign}${evalText(sc, m)}</span></div>` +
+    (m.best_san ? `<div class="best">Лучший ход: <b>${m.best_san}</b></div>` : '') +
+    (m.cls === 'book' ? `<div class="best">${esc(R.opening)}</div>` : '');
+  const cur = document.querySelector(`.mv[data-i="${ply}"]`);
+  cur.classList.add('cur');
+  $('moves').scrollTop = cur.offsetTop - $('moves').clientHeight / 2; // не scrollIntoView: тот прокручивает всю страницу
+}
+
+function flip(v = !flipped) {
+  flipped = v;
+  cg.set({ orientation: v ? 'black' : 'white' });
+  $('evalbar').classList.toggle('flip', v);
+  const h = R?.headers || {};
+  const bar = (c, name, elo) => `<i style="background:${c === 'w' ? '#f0f0f0' : '#111'}"></i>${esc(name || (c === 'w' ? 'Белые' : 'Чёрные'))} <span class="elo">${elo ? `(${esc(elo)})` : ''}</span>`;
+  const [top, bot] = [bar('b', h.Black, h.BlackElo), bar('w', h.White, h.WhiteElo)];
+  $('ptop').innerHTML = v ? bot : top;
+  $('pbot').innerHTML = v ? top : bot;
+  go(ply);
+}
+
+function render() {
+  const h = R.headers, st = R.stats;
+  const count = (c, k) => {
+    const n = st[c]?.counts[k] || 0;
+    return n ? `<td class="jump" data-c="${c}" data-k="${k}" title="К первому такому ходу">${n}</td>` : '<td>0</td>';
+  };
+  const player = (c, name) => `<div><div class="name">${esc(name)}</div><div class="acc ${c}">${st[c]?.accuracy ?? '—'}</div></div>`;
+  $('summary').className = 'card';
+  $('summary').innerHTML = `<div class="players">${player('w', h.White)}<div class="lbl">Точность</div>${player('b', h.Black)}</div>
+    <div class="opening">${esc(R.opening)}</div>
+    <table>${Object.keys(CLS).map(k => `<tr>${count('w', k)}<td>${icon(k)}${CLS[k][0]}</td>${count('b', k)}</tr>`).join('')}</table>`;
+  $('moves').innerHTML = R.moves.map((m, i) => (i % 2 ? '' : `<span class="no">${i / 2 + 1}.</span>`) +
+    `<span class="mv" data-i="${i + 1}">${icon(m.cls)}${m.san}</span>`).join('');
+}
+
+async function run(input, asBlack = false) {
+  document.querySelectorAll('.load button').forEach(b => b.disabled = true);
+  try {
+    status('Загрузка партии…');
+    const g = await api('/api/game', { input });
+    const evals = await analyse(g.fens);
+    R = await api('/api/report', { pgn: g.pgn, evals });
+    render();
+    ply = 0;
+    status('');
+    progress(0);
+    flip(asBlack);
+    go(0);
+    play('game-start');
+  } catch (e) {
+    status(e.message, true);
+    progress(0);
+  } finally {
+    document.querySelectorAll('.load button').forEach(b => b.disabled = false);
+  }
+}
+
+$('go').onclick = () => run($('input').value);
+// --- Аккаунт: ник хранится в браузере, слева последние 5 партий
+let account = JSON.parse(localStorage.account || 'null');
+const SITE = { chesscom: 'chess.com', lichess: 'lichess' };
+
+async function loadMyGames() {
+  const box = $('mygames');
+  $('acctbtn').textContent = account ? '👤 ' + account.user : 'Аккаунт';
+  if (!account) {
+    box.innerHTML = '<div class="hint">Нажмите «Аккаунт» и укажите ник — здесь будут ваши последние партии.</div>';
+    return;
+  }
+  const top = `<div class="top">Мои партии <small>${esc(SITE[account.site])}</small><button id="reload" title="Обновить">↻</button></div>`;
+  box.innerHTML = top + '<div class="hint">Загрузка…</div>';
+  let list;
+  try {
+    list = await api(`/api/games/${account.site}/${encodeURIComponent(account.user)}`);
+  } catch (e) {
+    box.innerHTML = top + `<div class="hint">${esc(e.message)}</div>`;
+    return;
+  }
+  const me = account.user.toLowerCase();
+  const games = list.map(g => {
+    const black = g.black.toLowerCase() === me;
+    const res = !g.winner ? 'd' : (g.winner === 'black') === black ? 'w' : 'l';
+    const [opp, elo] = black ? [g.white, g.white_elo] : [g.black, g.black_elo];
+    return { ...g, black, res, opp, elo };
+  });
+  box.innerHTML = top + (games.length ? `<ul>${games.map((g, i) => `<li data-i="${i}">
+      <span class="res ${g.res}">${{ w: 'В', l: 'П', d: 'Н' }[g.res]}</span>
+      <div><b>${g.black ? '♚' : '♔'} ${esc(g.opp)} ${g.elo ? `(${g.elo})` : ''}</b>
+      <small>${esc(g.speed || '')} · ${new Date(g.end * 1000).toLocaleDateString('ru')}</small></div></li>`).join('')}</ul>`
+    : '<div class="hint">Партий не найдено</div>');
+  box.onclick = e => {
+    if (e.target.id === 'reload') return loadMyGames();
+    const li = e.target.closest('li');
+    if (!li || $('go').disabled) return;
+    box.querySelectorAll('li.on').forEach(x => x.classList.remove('on'));
+    li.classList.add('on');
+    const g = games[li.dataset.i];
+    run(g.pgn, g.black);
+  };
+}
+
+$('acctbtn').onclick = () => {
+  const f = $('acct').querySelector('form');
+  f.site.value = account?.site || 'chesscom';
+  f.user.value = account?.user || '';
+  $('acct').showModal();
+};
+$('acct').onclose = () => {
+  const f = $('acct').querySelector('form'), v = $('acct').returnValue;
+  if (v === 'save') account = { site: f.site.value, user: f.user.value.trim() };
+  else if (v === 'logout') account = null;
+  else return;
+  localStorage.account = JSON.stringify(account);
+  loadMyGames();
+};
+loadMyGames();
+$('summary').onclick = e => {
+  const t = e.target.closest('td.jump');
+  if (!t) return;
+  // ход сделала сторона, которая НЕ ходит в позиции после него
+  const i = R.moves.findIndex(m => m.cls === t.dataset.k && m.fen.split(' ')[1] !== t.dataset.c);
+  if (i >= 0) go(i + 1);
+};
+$('moves').onclick = e => { const t = e.target.closest('.mv'); if (t) go(+t.dataset.i); };
+flip(false);
+if (location.hash.length > 1) run(decodeURIComponent(location.hash.slice(1))); // /#https://lichess.org/xxxx
+document.querySelectorAll('.nav [data-d]').forEach(b => b.onclick = () => go(ply + +b.dataset.d));
+$('flip').onclick = () => flip();
+$('mute').onclick = () => setMuted(!muted);
+setMuted(muted);
+document.addEventListener('keydown', e => {
+  if (e.target.matches('textarea, input')) return;
+  const d = { ArrowLeft: -1, ArrowRight: 1, Home: -999, End: 999 }[e.key];
+  if (d) { e.preventDefault(); go(ply + d); }
+  if (e.key === 'f') flip();
+  if (e.key === 'm') setMuted(!muted);
+});
+</script>
+</body>
+</html>
