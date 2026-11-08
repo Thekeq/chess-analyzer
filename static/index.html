@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Анализ партии</title>
 <link rel="stylesheet" href="/static/vendor/chessground.base.css">
 <link rel="stylesheet" href="/static/vendor/chessground.brown.css">
@@ -96,9 +96,37 @@
   .mv { padding: 4px 6px; cursor: pointer; border-radius: 4px; white-space: nowrap; }
   .mv:hover { background: #3c3a37; } .mv.cur { background: #4b4847; font-weight: 700; }
   .nav { display: flex; gap: 6px; flex: none; } .nav button { flex: 1; background: #3c3a37; font-size: 18px; padding: 10px; }
+  button { touch-action: manipulation; } /* без задержки и зума по двойному тапу */
   @media (max-width: 900px) {
-    .side { max-height: none; } #moves { max-height: 300px; } #comment, .nav { order: -1; }
-    header { padding: 10px; flex-direction: column; align-items: stretch; } .load > * { flex: 1 1 auto; } .load textarea { flex-basis: 100%; }
+    .side { max-height: none; } #moves { max-height: 300px; } #comment { order: -1; }
+  }
+  @media (max-width: 700px) {
+    /* телефон: доска во всю ширину, партии — лентой, навигация — снизу под большим пальцем */
+    :root { --bs: calc(100vw - 36px); }
+    body { font-size: 14px; }
+    header { padding: 8px; gap: 8px; }
+    .brand { flex: 1; font-size: 17px; }
+    #acctbtn { padding: 6px 10px; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; }
+    .load { order: 3; flex-basis: 100%; flex-wrap: nowrap; }
+    .load textarea { flex: 1; height: 38px; min-height: 38px; font-size: 13px; }
+    #status { padding: 4px; font-size: 13px; }
+    main { padding: 4px 8px 72px; gap: 8px; }
+    .mygames { width: 100%; padding: 8px; }
+    .mygames .top { margin-bottom: 6px; }
+    .mygames ul { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+    .mygames li { flex: 0 0 auto; width: 165px; padding: 6px; scroll-snap-align: start; }
+    .boardbox { gap: 4px; }
+    #evalbar { width: 14px; }
+    #evtxt { font-size: 8px; }
+    .pbar { height: 26px; padding-left: 18px; font-size: 13px; }
+    .pbar i { width: 16px; height: 16px; }
+    .side { width: 100%; }
+    .card { padding: 10px; }
+    .acc { font-size: 20px; }
+    td { padding: 1px 4px; }
+    .nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+           background: var(--panel); box-shadow: 0 -2px 8px #0006; }
+    .nav button { padding: 12px 0; }
   }
 </style>
 </head>
@@ -106,10 +134,10 @@
 <header>
   <div class="brand">Chess<span>Analyze</span></div>
   <div class="load">
-    <textarea id="input" placeholder="Вставьте PGN или ссылку на партию lichess.org"></textarea>
+    <textarea id="input" placeholder="PGN или ссылка на партию lichess"></textarea>
     <button id="go">Анализировать</button>
-    <button id="acctbtn">Аккаунт</button>
   </div>
+  <button id="acctbtn">Аккаунт</button>
 </header>
 <div id="progress"><div></div></div>
 <div id="status"></div>
@@ -179,11 +207,13 @@ async function api(url, body) {
 // --- Stockfish (WASM, работает у пользователя, сервер не грузит)
 // Полный многопоточный движок (79 МБ, кэшируется) на компьютерах; облегчённый — на телефонах и слабых машинах.
 const cores = navigator.hardwareConcurrency || 1;
-const FULL = self.crossOriginIsolated && cores >= 4 && !/Mobi|Android/i.test(navigator.userAgent);
+const MOBILE = navigator.userAgentData?.mobile || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+  || matchMedia('(pointer: coarse)').matches;
+const FULL = self.crossOriginIsolated && cores >= 4 && !MOBILE;
 const ENGINE = FULL
   // 2 потока: ПК остаётся свободным. Больше потоков/времени — сильнее анализ, но выше нагрузка.
   ? { file: 'stockfish-17.1-8e4d048.js', go: 'go depth 22 movetime 500', threads: 2, hash: 64, name: 'Stockfish 17.1' }
-  : { file: 'stockfish-17.1-lite-single-03e3232.js', go: 'go depth 14', threads: 1, hash: 32, name: 'Stockfish 17.1 lite' };
+  : { file: 'stockfish-17.1-lite-single-03e3232.js', go: 'go depth 14 movetime 400', threads: 1, hash: 32, name: 'Stockfish 17.1 lite' };
 // go: сила анализа. Меняешь — проверь точность против chess.com (константы ACC_* в analysis.py)
 const sf = new Worker('/static/engine/' + ENGINE.file);
 let onLine = () => {};
