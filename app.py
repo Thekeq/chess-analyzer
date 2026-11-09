@@ -6,7 +6,9 @@ import urllib.request
 
 from flask import Flask, abort, jsonify, request, send_from_directory
 
-from analysis import build_report, parse_game
+import chess
+
+from analysis import BOOK, _score, build_report, judge_move, parse_game, win_prob
 
 mimetypes.add_type("application/wasm", ".wasm")
 app = Flask(__name__)
@@ -60,6 +62,26 @@ def game():
 def report():
     data = request.get_json(force=True)
     return jsonify(build_report(data["pgn"], data["evals"]))
+
+
+@app.post("/api/judge")
+def judge():
+    """Classify a move the user plays on the board: {fen, uci, before, after, prev_cls?, prev_uci?} (evals as in /api/report)."""
+    d = request.get_json(force=True)
+    before, move = chess.Board(d["fen"]), chess.Move.from_uci(d["uci"])
+    if move not in before.legal_moves:
+        raise ValueError("Нелегальный ход")
+    after = before.copy(stack=False)
+    after.push(move)
+    score = _score(after, d.get("after"))
+    if after.epd() in BOOK:
+        cls, best_san, best_uci = "book", None, None
+    else:
+        prev = d.get("prev_uci")
+        recapture = bool(prev) and before.is_capture(move) and move.to_square == chess.parse_square(prev[2:4])
+        cls, best_san, best_uci = judge_move(before, move, d.get("before"), score, d.get("prev_cls"), recapture)
+    return jsonify(cls=cls, best_san=best_san, best_uci=best_uci, san=before.san(move), fen=after.fen(),
+                   score=dict(score, wp=round(win_prob(score), 4)), opening=BOOK.get(after.epd()))
 
 
 PAGE = 5

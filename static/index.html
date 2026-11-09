@@ -96,6 +96,10 @@
   #comment .head { display: flex; align-items: center; gap: 4px; font-size: 16px; }
   #comment .ev { margin-left: auto; font-weight: 700; color: #ccc; background: #3c3a37; padding: 2px 8px; border-radius: 4px; font-size: 14px; }
   #comment .best { margin-top: 6px; color: var(--muted); }
+  #comment .var { margin-top: 10px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; line-height: 1.8; }
+  #comment .var button { padding: 4px 10px; font-size: 13px; }
+  #comment .var .no { color: #8b8987; margin-left: 4px; }
+  .vmv { padding: 2px 4px; border-radius: 4px; cursor: pointer; } .vmv:hover { background: #3c3a37; } .vmv.cur { background: #4b4847; font-weight: 700; }
   #moves { position: relative; flex: 1; min-height: 120px; overflow: auto; display: grid; grid-template-columns: 2.6em 1fr 1fr; align-content: start; padding: 6px; }
   #moves .no { color: #8b8987; padding: 4px 0 4px 6px; }
   .mv { padding: 4px 6px; cursor: pointer; border-radius: 4px; white-space: nowrap; }
@@ -182,6 +186,7 @@
 </main>
 <script type="module">
 import { Chessground } from '/static/vendor/chessground.min.js';
+import { Chess } from '/static/vendor/chess.js';
 
 const svg = d => `<svg viewBox="0 0 24 24"><path d="${d}"/></svg>`;
 const CLS = {
@@ -240,29 +245,41 @@ function evalFen(fen) {
   return done;
 }
 
+const evalCache = new Map(); // fen -> оценка; ходы на доске из позиций партии не пересчитываются
+let engineChain = Promise.resolve(); // движок один — запросы строго по очереди
+
+async function evalWhite(fen) {
+  if (evalCache.has(fen)) return evalCache.get(fen);
+  const [a, b] = await evalFen(fen);
+  const s = fen.split(' ')[1] === 'w' ? 1 : -1; // движок даёт оценку за ходящего, храним за белых
+  const pov = x => x && ('cp' in x ? { cp: x.cp * s } : { mate: x.mate * s });
+  const ev = a ? { best: a.move, ...pov(a), second: pov(b) || null } : null;
+  evalCache.set(fen, ev);
+  return ev;
+}
+const queued = job => (engineChain = engineChain.then(job, job));
+
 async function analyse(fens) {
   await ready;
   send('ucinewgame');
+  evalCache.clear();
   const evals = [];
   for (const [i, fen] of fens.entries()) {
     status(`${ENGINE.name} (${ENGINE.threads} пот.): позиция ${i + 1} из ${fens.length}`);
     progress(i / fens.length);
-    const [a, b] = await evalFen(fen);
-    const s = fen.split(' ')[1] === 'w' ? 1 : -1; // движок даёт оценку за ходящего, храним за белых
-    const pov = x => x && ('cp' in x ? { cp: x.cp * s } : { mate: x.mate * s });
-    evals.push(a ? { best: a.move, ...pov(a), second: pov(b) || null } : null);
+    evals.push(await evalWhite(fen));
   }
   return evals;
 }
 
 // --- Доска
-let R = null, ply = 0, flipped = false;
+let R = null, ply = 0, flipped = false, analysing = false;
+let VAR = null; // свой вариант: { base: ply партии, nodes: [{fen, uci, san, cls, best_*, score}], idx: сколько ходов показано }
 // Рисование как на chess.com: ПКМ+тянуть — стрелка, ПКМ по клетке — красная клетка, ЛКМ — стереть всё.
-// Не viewOnly (иначе chessground глушит мышь), но фигуры двигать нельзя.
 const markSquares = shapes => cg.set({ highlight: { custom: new Map(shapes.filter(sh => !sh.dest).map(sh => [sh.orig, 'marked'])) } });
 const cg = Chessground($('board'), {
   animation: { duration: 250 },
-  movable: { free: false, color: undefined }, draggable: { enabled: false }, selectable: { enabled: false },
+  movable: { free: false, color: undefined, showDests: true, events: { after: (o, d) => userMove(o, d) } },
   disableContextMenu: true,
   drawable: {
     enabled: true, eraseOnClick: true, onChange: markSquares,
@@ -298,33 +315,34 @@ function setMuted(v) {
   $('mute').textContent = v ? '🔇' : '🔊';
 }
 
-function go(n) {
-  if (!R) return;
-  const prev = ply;
-  ply = Math.max(0, Math.min(R.moves.length, n));
-  const m = R.moves[ply - 1], fen = m ? m.fen : R.start_fen;
-  if (m && ply !== prev) {
-    play(moveSound(m));
-    if (m.cls === 'brilliant') setTimeout(() => play('brilliant-move'), 150);
-  }
+// Легальные ходы для доски (chess.js); ходить можно после анализа партии
+function movable(fen) {
+  if (!R || analysing) return { color: undefined, dests: new Map() };
+  const dests = new Map();
+  for (const m of new Chess(fen).moves({ verbose: true })) dests.set(m.from, [...(dests.get(m.from) || []), m.to]);
+  return { color: fen.split(' ')[1] === 'w' ? 'white' : 'black', dests };
+}
+
+// Рисует позицию: доска, значок хода, стрелка лучшего, шкала. m — показанный ход (или null), sc — оценка (или null: считается)
+function paint(fen, m, sc) {
   cg.set({
     fen, lastMove: m && [m.uci.slice(0, 2), m.uci.slice(2, 4)],
     turnColor: fen.split(' ')[1] === 'w' ? 'white' : 'black', check: !!m && /[+#]$/.test(m.san),
-    highlight: { custom: new Map() },
+    highlight: { custom: new Map() }, movable: movable(fen),
   });
   cg.setShapes([]); // нарисованное относится к позиции — при смене хода стираем, как chess.com
   cg.setAutoShapes(m?.best_uci ? [{ orig: m.best_uci.slice(0, 2), dest: m.best_uci.slice(2, 4), brush: 'best' }] : []);
 
   const wrap = $('wrap');
   wrap.querySelectorAll('.badge, .flash').forEach(e => e.remove());
-  const sc = R.scores[ply];
-  $('evalw').style.height = sc.wp * 100 + '%';
-  $('evtxt').textContent = evalText(sc, m);
-  $('evtxt').className = (sc.wp >= .5) !== flipped ? 'bot' : 'top';
-  document.querySelectorAll('.mv.cur').forEach(e => e.classList.remove('cur'));
-  if (!m) { $('comment').innerHTML = '<span class="hint">Начальная позиция — листайте стрелками ← →</span>'; return; }
-
-  const [name, sym, color] = CLS[m.cls];
+  wrap.style.removeProperty('--hl');
+  if (sc) {
+    $('evalw').style.height = sc.wp * 100 + '%';
+    $('evtxt').textContent = evalText(sc, m);
+    $('evtxt').className = (sc.wp >= .5) !== flipped ? 'bot' : 'top';
+  }
+  if (!m?.cls) return;
+  const [, sym, color] = CLS[m.cls];
   const f = m.uci.charCodeAt(2) - 97, r = +m.uci[3] - 1;
   const x = flipped ? 7 - f : f, y = flipped ? r : 7 - r;
   wrap.style.setProperty('--hl', color + '99');
@@ -337,28 +355,94 @@ function go(n) {
     fl.style.cssText = `left:${x * 12.5}%;top:${y * 12.5}%;background:radial-gradient(${color}, transparent 70%)`;
     wrap.append(fl);
   }
+}
 
+// Заголовок комментария: значок, ход, категория, оценка, лучший ход
+function moveInfo(m, sc, no) {
+  if (!m.cls) return `<div class="head"><b>${no}${m.san}</b>&nbsp;—&nbsp;<span class="hint">считаю…</span></div>`;
+  const [name, , color] = CLS[m.cls];
   const sign = m.san.endsWith('#') ? '' : sc.wp >= .5 ? '+' : '−';
-  const no = Math.ceil(ply / 2) + (ply % 2 ? '. ' : '… ');
-  $('comment').innerHTML = `<div class="head">${icon(m.cls)}<b>${no}${m.san}</b>&nbsp;—&nbsp;<span style="color:${color}">${name}</span>` +
+  return `<div class="head">${icon(m.cls)}<b>${no}${m.san}</b>&nbsp;—&nbsp;<span style="color:${color}">${name}</span>` +
     `<span class="ev">${sign}${evalText(sc, m)}</span></div>` +
     (m.best_san ? `<div class="best">Лучший ход: <b>${m.best_san}</b></div>` : '') +
-    (m.cls === 'book' ? `<div class="best">${esc(R.opening)}</div>` : '');
+    (m.cls === 'book' && (m.opening || R.opening) ? `<div class="best">${esc(m.opening || R.opening)}</div>` : '');
+}
+const moveNo = p => Math.ceil(p / 2) + (p % 2 ? '. ' : '… ');
+const sfx = m => { play(moveSound(m)); if (m.cls === 'brilliant') setTimeout(() => play('brilliant-move'), 150); };
+
+function go(n) {
+  if (!R) return;
+  VAR = null;
+  const prev = ply;
+  ply = Math.max(0, Math.min(R.moves.length, n));
+  const m = R.moves[ply - 1];
+  if (m && ply !== prev) sfx(m);
+  paint(m ? m.fen : R.start_fen, m, R.scores[ply]);
+  document.querySelectorAll('.mv.cur').forEach(e => e.classList.remove('cur'));
+  if (!m) { $('comment').innerHTML = '<span class="hint">Начальная позиция — листайте ← → или сделайте свой ход на доске</span>'; return; }
+  $('comment').innerHTML = moveInfo(m, R.scores[ply], moveNo(ply));
   const cur = document.querySelector(`.mv[data-i="${ply}"]`);
   cur.classList.add('cur');
   $('moves').scrollTop = cur.offsetTop - $('moves').clientHeight / 2; // не scrollIntoView: тот прокручивает всю страницу
 }
+
+// --- Свой вариант: ход мышкой из любой позиции, движок сразу оценивает его
+function showVar() {
+  const k = VAR.idx, m = VAR.nodes[k - 1];
+  const fen = m ? m.fen : (VAR.base ? R.moves[VAR.base - 1].fen : R.start_fen);
+  paint(fen, m, m ? m.score : R.scores[VAR.base]);
+  const line = VAR.nodes.map((n, i) => {
+    const p = VAR.base + i + 1;
+    return (p % 2 || i === 0 ? `<span class="no">${moveNo(p).trim()}</span>` : '') +
+      `<span class="vmv${i === k - 1 ? ' cur' : ''}" data-v="${i + 1}">${n.cls ? icon(n.cls) : ''}${n.san}</span>`;
+  }).join(' ');
+  $('comment').innerHTML = (m ? moveInfo(m, m.score, moveNo(VAR.base + k)) : '<span class="hint">Начало варианта</span>') +
+    `<div class="var"><button id="tomain" class="ghost">↩ К партии</button><span>Вариант: ${line}</span></div>`;
+}
+
+async function userMove(orig, dest) {
+  const fenBefore = VAR ? (VAR.idx ? VAR.nodes[VAR.idx - 1].fen : (VAR.base ? R.moves[VAR.base - 1].fen : R.start_fen))
+    : (ply ? R.moves[ply - 1].fen : R.start_fen);
+  const game = new Chess(fenBefore);
+  const mv = game.move({ from: orig, to: dest, promotion: 'q' }); // ponytail: превращение всегда в ферзя
+  if (!VAR) VAR = { base: ply, nodes: [], idx: 0 };
+  const prevNode = VAR.idx ? VAR.nodes[VAR.idx - 1] : R.moves[VAR.base - 1];
+  VAR.nodes = VAR.nodes.slice(0, VAR.idx); // новый ход отрезает старое продолжение варианта
+  const node = { fen: game.fen(), uci: mv.lan, san: mv.san, score: null };
+  VAR.nodes.push(node);
+  VAR.idx++;
+  sfx(node);
+  showVar();
+  try {
+    const [before, after] = await queued(async () => [await evalWhite(fenBefore), await evalWhite(node.fen)]);
+    Object.assign(node, await api('/api/judge', { fen: fenBefore, uci: node.uci, before, after, prev_cls: prevNode?.cls, prev_uci: prevNode?.uci }));
+  } catch (e) {
+    status(e.message, true);
+    return;
+  }
+  if (VAR?.nodes[VAR.idx - 1] === node) showVar(); // пользователь мог уже уйти на другой ход
+  if (node.cls === 'brilliant') play('brilliant-move');
+}
+
+// ← → внутри варианта; ← из начала варианта и любые прыжки — обратно в партию
+function step(d) {
+  if (VAR && d === 1 && VAR.idx < VAR.nodes.length) { VAR.idx++; sfx(VAR.nodes[VAR.idx - 1]); return showVar(); }
+  if (VAR && d === -1 && VAR.idx > 0) { VAR.idx--; return showVar(); }
+  if (VAR && d === 1) return;
+  go(ply + d);
+}
+const refresh = () => VAR ? showVar() : go(ply);
 
 function flip(v = !flipped) {
   flipped = v;
   cg.set({ orientation: v ? 'black' : 'white' });
   $('evalbar').classList.toggle('flip', v);
   const h = R?.headers || {};
-  const bar = (c, name, elo) => `<i style="background:${c === 'w' ? '#f0f0f0' : '#111'}"></i>${esc(name || (c === 'w' ? 'Белые' : 'Чёрные'))} <span class="elo">${elo ? `(${esc(elo)})` : ''}</span>`;
+  const bar = (c, name, elo) => `<i style="background:${c === 'w' ? '#f0f0f0' : '#111'}"></i>${esc(name && name !== '?' ? name : c === 'w' ? 'Белые' : 'Чёрные')} <span class="elo">${elo ? `(${esc(elo)})` : ''}</span>`;
   const [top, bot] = [bar('b', h.Black, h.BlackElo), bar('w', h.White, h.WhiteElo)];
   $('ptop').innerHTML = v ? bot : top;
   $('pbot').innerHTML = v ? top : bot;
-  go(ply);
+  refresh();
 }
 
 function render() {
@@ -367,7 +451,7 @@ function render() {
     const n = st[c]?.counts[k] || 0;
     return n ? `<td class="jump" data-c="${c}" data-k="${k}" title="К первому такому ходу">${n}</td>` : '<td>0</td>';
   };
-  const player = (c, name) => `<div><div class="name">${esc(name)}</div><div class="acc ${c}">${st[c]?.accuracy ?? '—'}</div></div>`;
+  const player = (c, name) => `<div><div class="name">${esc(name && name !== '?' ? name : c === 'w' ? 'Белые' : 'Чёрные')}</div><div class="acc ${c}">${st[c]?.accuracy ?? '—'}</div></div>`;
   $('summary').className = 'card';
   $('summary').innerHTML = `<div class="players">${player('w', h.White)}<div class="lbl">Точность</div>${player('b', h.Black)}</div>
     <div class="opening">${esc(R.opening)}</div>
@@ -381,7 +465,11 @@ async function run(input, asBlack = false) {
   try {
     status('Загрузка партии…');
     const g = await api('/api/game', { input });
-    const evals = await analyse(g.fens);
+    analysing = true;
+    VAR = null;
+    cg.set({ movable: { color: undefined, dests: new Map() } }); // пока идёт анализ — ходить нельзя
+    const evals = await queued(() => analyse(g.fens));
+    analysing = false;
     R = await api('/api/report', { pgn: g.pgn, evals });
     render();
     ply = 0;
@@ -394,6 +482,7 @@ async function run(input, asBlack = false) {
     status(e.message, true);
     progress(0);
   } finally {
+    analysing = false;
     document.querySelectorAll('.load button').forEach(b => b.disabled = false);
   }
 }
@@ -474,14 +563,19 @@ $('summary').onclick = e => {
 $('moves').onclick = e => { const t = e.target.closest('.mv'); if (t) go(+t.dataset.i); };
 flip(false);
 if (location.hash.length > 1) run(decodeURIComponent(location.hash.slice(1))); // /#https://lichess.org/xxxx
-document.querySelectorAll('.nav [data-d]').forEach(b => b.onclick = () => go(ply + +b.dataset.d));
+document.querySelectorAll('.nav [data-d]').forEach(b => b.onclick = () => step(+b.dataset.d));
+$('comment').onclick = e => {
+  if (e.target.id === 'tomain') return go(VAR.base);
+  const v = e.target.closest('.vmv');
+  if (v) { VAR.idx = +v.dataset.v; showVar(); }
+};
 $('flip').onclick = () => flip();
 $('mute').onclick = () => setMuted(!muted);
 setMuted(muted);
 document.addEventListener('keydown', e => {
   if (e.target.matches('textarea, input')) return;
   const d = { ArrowLeft: -1, ArrowRight: 1, Home: -999, End: 999 }[e.key];
-  if (d) { e.preventDefault(); go(ply + d); }
+  if (d) { e.preventDefault(); step(d); }
   if (e.key === 'f') flip();
   if (e.key === 'm') setMuted(!muted);
 });

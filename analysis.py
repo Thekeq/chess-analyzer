@@ -126,6 +126,26 @@ def _score(board, ev):
     return {"cp": 0}
 
 
+def judge_move(before, move, ev, score_after, prev_cls=None, recapture=False):
+    """Classify one move. ev: engine eval of `before` (white POV, best/second); score_after: white-POV score after it.
+    Returns (cls, best_san, best_uci); best_* only when a better move existed."""
+    ev = ev or {}
+    pov = (lambda p: p) if before.turn == chess.WHITE else (lambda p: 1 - p)
+    wp_best, wp_after = pov(win_prob(_score(before, ev))), pov(win_prob(score_after))
+    is_best = move.uci() == ev.get("best")
+    if is_best:
+        wp_after = wp_best  # same line, avoid depth noise between two searches
+    loss = max(0.0, wp_best - wp_after)
+    is_best = is_best or loss < 0.005
+    wp_second = pov(win_prob(ev["second"])) if ev.get("second") else None
+    sac = loss <= 0.02 and is_sacrifice(before, move)  # only matters for brilliant, skip the slow check otherwise
+    cls = classify(loss, is_best, sac, wp_best, wp_after, wp_second, prev_cls, recapture)
+    best = chess.Move.from_uci(ev["best"]) if ev.get("best") and not is_best else None
+    if best and best not in before.legal_moves:
+        best = None
+    return cls, best and before.san(best), best and best.uci()
+
+
 def build_report(pgn, evals):
     """evals[i] = {'best': uci, 'cp'|'mate': white POV, 'second': {'cp'|'mate'}|None} or None."""
     game = read_game(pgn)
@@ -144,35 +164,23 @@ def build_report(pgn, evals):
 
     out, stats, in_book, opening, prev_cls = [], {}, True, game.headers.get("Opening", ""), None
     for i, move in enumerate(moves):
-        before, after, ev = boards[i], boards[i + 1], evals[i] or {}
-        white = before.turn == chess.WHITE
-        pov = (lambda p: p) if white else (lambda p: 1 - p)
-        wp_best, wp_after = pov(wps[i]), pov(wps[i + 1])
-        is_best = move.uci() == ev.get("best")
-        if is_best:
-            wp_after = wp_best  # same line, avoid depth noise between two searches
-        loss = max(0.0, wp_best - wp_after)
-        is_best = is_best or loss < 0.005
-        wp_second = pov(win_prob(ev["second"])) if ev.get("second") else None
-
+        before, after = boards[i], boards[i + 1]
         in_book = in_book and after.epd() in BOOK
         if in_book:
-            cls, opening = "book", BOOK[after.epd()]
+            cls, opening, best_san, best_uci = "book", BOOK[after.epd()], None, None
         else:
             recapture = i > 0 and before.is_capture(move) and move.to_square == moves[i - 1].to_square
-            sac = loss <= 0.02 and is_sacrifice(before, move)  # only matters for brilliant, skip the slow check otherwise
-            cls = classify(loss, is_best, sac, wp_best, wp_after, wp_second, prev_cls, recapture)
+            cls, best_san, best_uci = judge_move(before, move, evals[i], scores[i + 1], prev_cls, recapture)
         prev_cls = cls
 
-        best = chess.Move.from_uci(ev["best"]) if ev.get("best") and cls != "book" else None
+        white = before.turn == chess.WHITE
         side = stats.setdefault("w" if white else "b", {"acc": [], "counts": {}})
         a, b = acc_wps[i], acc_wps[i + 1]
         side["acc"].append(move_accuracy(a, b) if white else move_accuracy(100 - a, 100 - b))
         side["counts"][cls] = side["counts"].get(cls, 0) + 1
         out.append({
             "san": before.san(move), "uci": move.uci(), "fen": after.fen(), "cls": cls,
-            "best_san": before.san(best) if best and not is_best and best in before.legal_moves else None,
-            "best_uci": best.uci() if best and not is_best else None,
+            "best_san": best_san, "best_uci": best_uci,
         })
 
     for side in stats.values():
