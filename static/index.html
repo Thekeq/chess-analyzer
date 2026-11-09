@@ -17,7 +17,7 @@
   button:hover:not(:disabled) { filter: brightness(1.1); }
   button:disabled { opacity: .5; cursor: default; }
   header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); }
-  .brand { font-weight: 800; font-size: 20px; margin-right: 8px; }
+  .brand { font-weight: 800; font-size: 20px; margin-right: 8px; color: inherit; text-decoration: none; }
   .brand span { color: #81b64c; }
   .load { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
   .load textarea { flex: 1 1 320px; height: 40px; min-height: 40px; resize: vertical; }
@@ -141,7 +141,7 @@
 </head>
 <body>
 <header>
-  <div class="brand">Chess<span>Analyze</span></div>
+  <a class="brand" href="/" title="На главную">Chess<span>Analyze</span></a>
   <div class="load">
     <textarea id="input" placeholder="PGN или ссылка на партию lichess"></textarea>
     <button id="go">Анализировать</button>
@@ -250,6 +250,7 @@ let engineChain = Promise.resolve(); // движок один — запросы
 
 async function evalWhite(fen) {
   if (evalCache.has(fen)) return evalCache.get(fen);
+  await ready; // ход до загрузки движка не должен перехватить его 'readyok'
   const [a, b] = await evalFen(fen);
   const s = fen.split(' ')[1] === 'w' ? 1 : -1; // движок даёт оценку за ходящего, храним за белых
   const pov = x => x && ('cp' in x ? { cp: x.cp * s } : { mate: x.mate * s });
@@ -273,7 +274,10 @@ async function analyse(fens) {
 }
 
 // --- Доска
-let R = null, ply = 0, flipped = false, analysing = false;
+// Пустая «партия» из начальной позиции: на главной можно сразу ходить, движок оценивает ходы
+const blankGame = () => ({ moves: [], start_fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+  scores: [{ cp: 0, wp: 0.5 }], headers: {}, opening: '', stats: {} });
+let R = blankGame(), ply = 0, flipped = false, analysing = false;
 let VAR = null; // свой вариант: { base: ply партии, nodes: [{fen, uci, san, cls, best_*, score}], idx: сколько ходов показано }
 // Рисование как на chess.com: ПКМ+тянуть — стрелка, ПКМ по клетке — красная клетка, ЛКМ — стереть всё.
 const markSquares = shapes => cg.set({ highlight: { custom: new Map(shapes.filter(sh => !sh.dest).map(sh => [sh.orig, 'marked'])) } });
@@ -379,7 +383,11 @@ function go(n) {
   if (m && ply !== prev) sfx(m);
   paint(m ? m.fen : R.start_fen, m, R.scores[ply]);
   document.querySelectorAll('.mv.cur').forEach(e => e.classList.remove('cur'));
-  if (!m) { $('comment').innerHTML = '<span class="hint">Начальная позиция — листайте ← → или сделайте свой ход на доске</span>'; return; }
+  if (!m) {
+    $('comment').innerHTML = `<span class="hint">${R.moves.length ? 'Начальная позиция — листайте ← → или сделайте свой ход на доске'
+      : 'Сделайте ход на доске — движок сразу его оценит. Или загрузите партию.'}</span>`;
+    return;
+  }
   $('comment').innerHTML = moveInfo(m, R.scores[ply], moveNo(ply));
   const cur = document.querySelector(`.mv[data-i="${ply}"]`);
   cur.classList.add('cur');
@@ -397,7 +405,7 @@ function showVar() {
       `<span class="vmv${i === k - 1 ? ' cur' : ''}" data-v="${i + 1}">${n.cls ? icon(n.cls) : ''}${n.san}</span>`;
   }).join(' ');
   $('comment').innerHTML = (m ? moveInfo(m, m.score, moveNo(VAR.base + k)) : '<span class="hint">Начало варианта</span>') +
-    `<div class="var"><button id="tomain" class="ghost">↩ К партии</button><span>Вариант: ${line}</span></div>`;
+    `<div class="var"><button id="tomain" class="ghost">${R.moves.length ? '↩ К партии' : '↺ Сначала'}</button><span>Вариант: ${line}</span></div>`;
 }
 
 async function userMove(orig, dest) {
