@@ -65,6 +65,8 @@
   #wrap coords.ranks { top: 0; left: 3px; } #wrap coords.ranks coord { transform: none; padding-top: 2px; }
   #wrap coords.files { left: 0; bottom: 0; height: auto; } #wrap coords.files coord { text-align: right; padding: 0 3px 1px 0; }
   #wrap cg-board square.last-move { background-color: var(--hl, rgba(155, 199, 0, .41)); }
+  #wrap cg-board square.marked { background-color: rgba(235, 97, 80, .8); } /* ПКМ по клетке */
+  #wrap svg.cg-shapes circle { display: none; } /* вместо кружков chessground красим клетку целиком */
   .badge { position: absolute; z-index: 5; width: 5.4cqi; height: 5.4cqi; border-radius: 50%; display: grid; place-items: center;
            translate: -60% -40%; color: #fff; font-weight: 800; font-size: 2.5cqi; box-shadow: 0 1px 3px #0009;
            pointer-events: none; animation: pop .35s ease-out; }
@@ -255,7 +257,21 @@ async function analyse(fens) {
 
 // --- Доска
 let R = null, ply = 0, flipped = false;
-const cg = Chessground($('board'), { viewOnly: true, animation: { duration: 250 } });
+// Рисование как на chess.com: ПКМ+тянуть — стрелка, ПКМ по клетке — красная клетка, ЛКМ — стереть всё.
+// Не viewOnly (иначе chessground глушит мышь), но фигуры двигать нельзя.
+const markSquares = shapes => cg.set({ highlight: { custom: new Map(shapes.filter(sh => !sh.dest).map(sh => [sh.orig, 'marked'])) } });
+const cg = Chessground($('board'), {
+  animation: { duration: 250 },
+  movable: { free: false, color: undefined }, draggable: { enabled: false }, selectable: { enabled: false },
+  disableContextMenu: true,
+  drawable: {
+    enabled: true, eraseOnClick: true, onChange: markSquares,
+    brushes: {
+      green: { key: 'g', color: '#ffaa00', opacity: 0.85, lineWidth: 15 }, // стрелка пользователя (оранжевая)
+      best: { key: 'b', color: '#15781b', opacity: 0.8, lineWidth: 15 },  // лучший ход движка
+    },
+  },
+});
 new ResizeObserver(() => cg.redrawAll()).observe($('wrap'));
 const evalText = (sc, m) => m?.san.endsWith('#') ? (sc.wp > .5 ? '1-0' : '0-1')
   : 'mate' in sc ? 'M' + Math.abs(sc.mate) : (Math.abs(sc.cp) / 100).toFixed(1);
@@ -294,8 +310,10 @@ function go(n) {
   cg.set({
     fen, lastMove: m && [m.uci.slice(0, 2), m.uci.slice(2, 4)],
     turnColor: fen.split(' ')[1] === 'w' ? 'white' : 'black', check: !!m && /[+#]$/.test(m.san),
+    highlight: { custom: new Map() },
   });
-  cg.setAutoShapes(m?.best_uci ? [{ orig: m.best_uci.slice(0, 2), dest: m.best_uci.slice(2, 4), brush: 'green' }] : []);
+  cg.setShapes([]); // нарисованное относится к позиции — при смене хода стираем, как chess.com
+  cg.setAutoShapes(m?.best_uci ? [{ orig: m.best_uci.slice(0, 2), dest: m.best_uci.slice(2, 4), brush: 'best' }] : []);
 
   const wrap = $('wrap');
   wrap.querySelectorAll('.badge, .flash').forEach(e => e.remove());
