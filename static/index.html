@@ -453,6 +453,12 @@ const cg = Chessground($('board'), {
   },
 });
 new ResizeObserver(() => cg.redrawAll()).observe($('wrap'));
+// chessground caches the board's screen position and refreshes it only on scroll/resize. Layout shifts without
+// those (e.g. a scrollbar appearing flips the 3-column breakpoint) left it stale, so pieces landed on the wrong
+// squares. Refresh it at the start of every press instead.
+for (const type of ['mousedown', 'touchstart']) {
+  $('wrap').addEventListener(type, () => cg.state.dom.bounds.clear(), { capture: true, passive: true });
+}
 const evalText = (sc, m) => m?.san.endsWith('#') ? (sc.wp > .5 ? '1-0' : '0-1')
   : 'mate' in sc ? 'M' + Math.abs(sc.mate) : (Math.abs(sc.cp) / 100).toFixed(1);
 
