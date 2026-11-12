@@ -176,6 +176,7 @@
 </style>
 </head>
 <body data-mode="analysis" data-auth="out">
+<script>if (localStorage.authed) document.body.dataset.auth = 'in'; // до первой отрисовки: без мигания экрана входа (сервер всё равно проверит)</script>
 <div id="auth">
   <form class="card">
     <div class="brand">Chess<span>Analyze</span></div>
@@ -610,7 +611,7 @@ $('acctbtn').onclick = () => {
 };
 $('acct').onclose = async () => {
   const f = $('acct').querySelector('form'), v = $('acct').returnValue;
-  if (v === 'logout') { await api('/api/auth/logout', {}); return location.assign('/'); }
+  if (v === 'logout') { await api('/api/auth/logout', {}); delete localStorage.authed; return location.assign('/'); }
   if (v !== 'save') return;
   try { applyMe(await api('/api/me', { site: f.site.value, nick: f.user.value.trim() })); } catch (e) { return status(e.message, true); }
   loadMyGames(0);
@@ -619,11 +620,13 @@ $('acct').onclose = async () => {
 // --- Вход: без аккаунта сайт не работает; рейтинг задач, рекорд штурма и ник хранятся на сервере
 let ME = null, authMode = 'login';
 function showAuth() {
+  delete localStorage.authed;
   document.body.dataset.auth = 'out';
   $('auth').querySelector('[name=username]').focus();
 }
 function applyMe(me) {
   ME = me;
+  localStorage.authed = '1';
   account = me.nick ? { site: me.site, user: me.nick } : null;
   $('acctbtn').textContent = '👤 ' + me.username;
   $('whoami').textContent = me.username;
