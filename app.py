@@ -183,6 +183,11 @@ def index():
     return send_from_directory("static", "index.html")
 
 
+@app.get("/favicon.ico")
+def favicon():  # browsers and crawlers ask for /favicon.ico regardless of <link rel="icon">
+    return send_from_directory("static", "favicon.svg", mimetype="image/svg+xml")
+
+
 @app.get("/robots.txt")
 def robots():
     return Response(f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://{request.host}/sitemap.xml\n", mimetype="text/plain")
