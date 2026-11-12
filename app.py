@@ -1,8 +1,13 @@
+import bisect
+import csv
+import gzip
 import json
 import mimetypes
+import random
 import re
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_from_directory
 
@@ -82,6 +87,26 @@ def judge():
         cls, best_san, best_uci = judge_move(before, move, d.get("before"), score, d.get("prev_cls"), recapture)
     return jsonify(cls=cls, best_san=best_san, best_uci=best_uci, san=before.san(move), fen=after.fen(),
                    score=dict(score, wp=round(win_prob(score), 4)), opening=BOOK.get(after.epd()))
+
+
+# Lichess puzzle subset (CC0), sorted by rating; rebuild with tools/build_puzzles.py
+with gzip.open(Path(__file__).parent / "data" / "puzzles.csv.gz", "rt", encoding="utf-8") as f:
+    PUZZLES = list(csv.DictReader(f))
+PUZZLE_RATINGS = [int(p["rating"]) for p in PUZZLES]
+
+
+@app.get("/api/puzzle")
+def puzzle():
+    """Random puzzle near ?rating=; ?short=1 keeps only 1-2 move puzzles (puzzle rush)."""
+    rating = min(max(request.args.get("rating", 1200, type=int), PUZZLE_RATINGS[0]), PUZZLE_RATINGS[-1])
+    short = request.args.get("short") == "1"
+    for spread in (50, 100, 200, 400, 3000):
+        lo = bisect.bisect_left(PUZZLE_RATINGS, rating - spread)
+        hi = bisect.bisect_right(PUZZLE_RATINGS, rating + spread)
+        pool = [p for p in PUZZLES[lo:hi] if not short or len(p["moves"].split()) <= 4]
+        if pool:
+            return jsonify(random.choice(pool))
+    abort(404)
 
 
 PAGE = 5

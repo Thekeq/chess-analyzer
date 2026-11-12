@@ -109,6 +109,28 @@
   @media (max-width: 900px) {
     .side { max-height: none; } #moves { max-height: 300px; } #comment { order: -1; }
   }
+  /* режимы: в задачах/штурме прячем всё, что относится к анализу */
+  .modes { display: flex; gap: 4px; }
+  .modes button { background: #3c3a37; padding: 7px 12px; }
+  .modes button.on { background: #81b64c; }
+  body:not([data-mode=analysis]) :is(.load, #mygames, #evalbar, #summary, #comment, #moves, .nav, .pbar) { display: none !important; }
+  body[data-mode=analysis] #pz { display: none; }
+  #pz { display: flex; flex-direction: column; gap: 10px; }
+  #pz h3 { margin: 0; font-size: 18px; }
+  #pz .big { font-size: 34px; font-weight: 800; }
+  #pz .delta.up { color: #81b64c; } #pz .delta.down { color: #fa412d; }
+  #pz .msg { padding: 10px; border-radius: 6px; background: #2f2d2a; font-weight: 600; }
+  #pz .msg.ok { background: #2f4a1f; color: #b5e48c; } #pz .msg.bad { background: #4a1f1f; color: #ffaaa0; }
+  #pz .row { display: flex; gap: 6px; } #pz .row button { flex: 1; }
+  #pz .tags { color: var(--muted); font-size: 13px; }
+  #pz .stat { display: flex; justify-content: space-between; align-items: center; }
+  #pz .timer { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #pz .timer.low { color: #fa412d; }
+  #pz .strikes { font-size: 22px; letter-spacing: 4px; color: #4b4847; } #pz .strikes b { color: #fa412d; }
+  #pz .trail { display: flex; flex-wrap: wrap; gap: 4px; }
+  #pz .trail i { width: 22px; height: 22px; border-radius: 4px; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 800; color: #fff; }
+  #pz .trail i.ok { background: #81b64c; } #pz .trail i.bad { background: #fa412d; }
+  #wrap cg-board square.hint { background: rgba(80, 160, 255, .55); }
   @media (max-width: 700px) {
     /* телефон: доска во всю ширину, партии — лентой, навигация — снизу под большим пальцем */
     :root { --bs: calc(100vw - 36px); }
@@ -117,6 +139,7 @@
     .brand { flex: 1; font-size: 17px; }
     #acctbtn { padding: 6px 10px; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; }
     .load { order: 3; flex-basis: 100%; flex-wrap: nowrap; }
+    .modes { order: 2; flex-basis: 100%; } .modes button { flex: 1; }
     .load textarea { flex: 1; height: 38px; min-height: 38px; font-size: 13px; }
     #status { padding: 4px; font-size: 13px; }
     main { padding: 4px 8px 72px; gap: 8px; }
@@ -139,9 +162,10 @@
   }
 </style>
 </head>
-<body>
+<body data-mode="analysis">
 <header>
   <a class="brand" href="/" title="На главную">Chess<span>Analyze</span></a>
+  <nav class="modes"><button data-mode="analysis" class="on">Анализ</button><button data-mode="puzzle">Задачи</button><button data-mode="rush">Штурм</button></nav>
   <div class="load">
     <textarea id="input" placeholder="PGN или ссылка на партию lichess"></textarea>
     <button id="go">Анализировать</button>
@@ -176,6 +200,7 @@
     <div class="pbar" id="pbot"></div>
   </section>
   <aside class="side">
+    <div class="card" id="pz"></div>
     <div class="card hint" id="summary">Выберите партию слева (кнопка «Аккаунт» — ваш ник chess.com или lichess) или вставьте PGN / ссылку lichess сверху.<br>Stockfish 17 проанализирует её прямо в браузере.</div>
     <div class="card" id="comment"></div>
     <div class="card" id="moves"></div>
@@ -283,7 +308,7 @@ let VAR = null; // свой вариант: { base: ply партии, nodes: [{f
 const markSquares = shapes => cg.set({ highlight: { custom: new Map(shapes.filter(sh => !sh.dest).map(sh => [sh.orig, 'marked'])) } });
 const cg = Chessground($('board'), {
   animation: { duration: 250 },
-  movable: { free: false, color: undefined, showDests: true, events: { after: (o, d) => userMove(o, d) } },
+  movable: { free: false, color: undefined, showDests: true, events: { after: (o, d) => MODE === 'analysis' ? userMove(o, d) : puzzleMove(o, d) } },
   disableContextMenu: true,
   drawable: {
     enabled: true, eraseOnClick: true, onChange: markSquares,
@@ -299,7 +324,7 @@ const evalText = (sc, m) => m?.san.endsWith('#') ? (sc.wp > .5 ? '1-0' : '0-1')
 
 // --- Звуки
 const SND = Object.fromEntries(['move-self', 'move-opponent', 'move-check', 'capture', 'castle',
-  'promote', 'game-end', 'game-start', 'brilliant-move']
+  'promote', 'game-end', 'game-start', 'brilliant-move', 'puzzle-correct', 'puzzle-wrong']
   .map(n => [n, new Audio(`/static/sounds/${n}.mp3`)]));
 let muted = localStorage.muted === '1';
 const play = name => {
@@ -561,6 +586,218 @@ $('acct').onclose = () => {
   loadMyGames(0);
 };
 loadMyGames();
+
+// ===================== Задачи и штурм (база задач lichess, CC0) =====================
+let MODE = 'analysis';
+let PZ = null; // текущая задача: { data, game, sol: [uci], step, color, failed, done }
+const PR = Object.assign({ rating: 1200, games: 0 }, JSON.parse(localStorage.puzzleRating || '{}')); // рейтинг задач
+const seenPuzzles = new Set(JSON.parse(localStorage.seenPuzzles || '[]'));
+const THEMES = {
+  mate: 'Мат', mateIn1: 'Мат в 1', mateIn2: 'Мат в 2', mateIn3: 'Мат в 3', mateIn4: 'Мат в 4', fork: 'Вилка', pin: 'Связка',
+  skewer: 'Сквозной удар', hangingPiece: 'Висящая фигура', sacrifice: 'Жертва', discoveredAttack: 'Вскрытое нападение',
+  doubleCheck: 'Двойной шах', deflection: 'Отвлечение', attraction: 'Завлечение', backRankMate: 'Мат по последней горизонтали',
+  promotion: 'Превращение', trappedPiece: 'Пойманная фигура', clearance: 'Освобождение поля', interference: 'Перекрытие',
+  intermezzo: 'Промежуточный ход', quietMove: 'Тихий ход', zugzwang: 'Цугцванг', advantage: 'Выигрыш материала',
+  crushing: 'Решающее преимущество', endgame: 'Эндшпиль', middlegame: 'Миттельшпиль', opening: 'Дебют',
+  smotheredMate: 'Спёртый мат', exposedKing: 'Открытый король', kingsideAttack: 'Атака на короля', defensiveMove: 'Защита',
+};
+
+async function fetchPuzzle(rating, short) {
+  for (let i = 0; i < 5; i++) { // избегаем недавно решённых
+    const p = await api(`/api/puzzle?rating=${Math.round(rating)}${short ? '&short=1' : ''}`);
+    if (!seenPuzzles.has(p.id) || i === 4) {
+      seenPuzzles.add(p.id);
+      localStorage.seenPuzzles = JSON.stringify([...seenPuzzles].slice(-500));
+      return p;
+    }
+  }
+}
+
+function pzMovable() {
+  if (!PZ || PZ.done || PZ.step >= PZ.sol.length || PZ.step % 2 === 0) return { color: undefined, dests: new Map() };
+  const dests = new Map();
+  for (const m of PZ.game.moves({ verbose: true })) dests.set(m.from, [...(dests.get(m.from) || []), m.to]);
+  return { color: PZ.color, dests };
+}
+function pzShow(lastMove) {
+  cg.set({ fen: PZ.game.fen(), lastMove, turnColor: PZ.game.turn() === 'w' ? 'white' : 'black', check: PZ.game.inCheck(),
+    movable: pzMovable(), highlight: { custom: new Map() } });
+}
+function pzPlay(uci) { // ход соперника (или показ решения)
+  const mv = PZ.game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+  PZ.step++;
+  PZ.last = [mv.from, mv.to];
+  play(mv.san.includes('+') ? 'move-check' : mv.captured ? 'capture' : 'move-opponent');
+  pzShow(PZ.last);
+}
+
+function startPuzzle(data) {
+  const game = new Chess(data.fen);
+  PZ = { data, game, sol: data.moves.split(' '), step: 0, color: game.turn() === 'w' ? 'black' : 'white', failed: false, done: false };
+  cg.setShapes([]);
+  cg.setAutoShapes([]);
+  $('wrap').querySelectorAll('.badge, .flash').forEach(e => e.remove());
+  $('wrap').style.removeProperty('--hl');
+  cg.set({ orientation: PZ.color });
+  pzShow(undefined);
+  const mine = PZ;
+  setTimeout(() => { if (PZ === mine) { pzPlay(PZ.sol[0]); pzRender(); } }, 500); // первый ход — соперника
+  pzRender();
+}
+
+function puzzleMove(orig, dest) {
+  const want = PZ.sol[PZ.step];
+  const mv = PZ.game.move({ from: orig, to: dest, promotion: want?.startsWith(orig + dest) ? want[4] || 'q' : 'q' });
+  if (mv.lan !== want && !PZ.game.isCheckmate()) { // любой матующий ход тоже засчитывается (как на lichess)
+    PZ.game.undo();
+    pzShow(PZ.last); // откатываем неверный ход
+    play('puzzle-wrong');
+    return MODE === 'rush' ? rushResult(false) : pzFail();
+  }
+  PZ.step++;
+  play(mv.san.includes('+') ? 'move-check' : mv.captured ? 'capture' : 'move-self');
+  if (PZ.step >= PZ.sol.length || PZ.game.isCheckmate()) {
+    PZ.done = true;
+    pzShow([mv.from, mv.to]);
+    play('puzzle-correct');
+    return MODE === 'rush' ? rushResult(true) : pzSolved();
+  }
+  pzShow([mv.from, mv.to]);
+  const mine = PZ;
+  setTimeout(() => { if (PZ === mine) pzPlay(PZ.sol[PZ.step]); }, 300);
+}
+
+// --- рейтинговые задачи: Эло против рейтинга задачи, засчитывается только первая попытка
+function rate(win) {
+  const expected = 1 / (1 + 10 ** ((+PZ.data.rating - PR.rating) / 400));
+  const delta = Math.round((PR.games < 30 ? 40 : 20) * ((win ? 1 : 0) - expected)); // первые 30 задач рейтинг меняется быстрее
+  PR.rating = Math.max(100, PR.rating + delta);
+  PR.games++;
+  localStorage.puzzleRating = JSON.stringify(PR);
+  return delta;
+}
+function pzSolved() { if (!PZ.failed) PZ.delta = rate(true); PZ.result = 'ok'; pzRender(); }
+function pzFail() { if (!PZ.failed) { PZ.failed = true; PZ.delta = rate(false); } PZ.result = 'bad'; pzRender(); }
+async function nextPuzzle() { $('pz').innerHTML = '<span class="hint">Загрузка задачи…</span>'; startPuzzle(await fetchPuzzle(PR.rating)); }
+
+function pzRender() {
+  if (MODE === 'rush') return rushRender();
+  const d = PZ.delta, sign = d > 0 ? '+' : '';
+  const tags = PZ.data.themes.split(' ').map(t => THEMES[t]).filter(Boolean).join(' · ');
+  const side = PZ.color === 'white' ? 'белых' : 'чёрных';
+  const msg = PZ.result === 'ok' ? `<div class="msg ok">✓ Решено!</div>`
+    : PZ.result === 'bad' ? `<div class="msg bad">✗ Неверно. Попробуйте ещё или посмотрите решение.</div>`
+    : `<div class="msg">Ход ${side}: найдите лучший ход</div>`;
+  $('pz').innerHTML = `<h3>Задачи</h3>
+    <div class="stat"><span>Ваш рейтинг</span><span><span class="big">${PR.rating}</span>
+      ${d !== undefined ? `<span class="delta ${d >= 0 ? 'up' : 'down'}">${sign}${d}</span>` : ''}</span></div>
+    ${msg}
+    ${PZ.result ? `<div class="tags">Рейтинг задачи: ${PZ.data.rating}${tags ? ' · ' + tags : ''}</div>` : ''}
+    <div class="row">${PZ.done ? '' : '<button id="pzhint" class="ghost">Подсказка</button><button id="pzsol" class="ghost">Решение</button>'}
+      <button id="pznext">${PZ.done ? 'Следующая →' : 'Пропустить'}</button></div>
+    <div class="tags">Сыграно задач: ${PR.games}. Подсказка, решение или пропуск засчитываются как неудача.</div>`;
+}
+
+$('pz').onclick = e => {
+  const id = e.target.id;
+  if (id === 'pznext') {
+    if (MODE === 'puzzle' && PZ && !PZ.done && !PZ.failed && PZ.step > 0) pzFail(); // пропуск = неудача
+    return MODE === 'rush' ? null : nextPuzzle();
+  }
+  if (id === 'pzhint' && PZ.step % 2 === 1) {
+    pzFail();
+    cg.set({ highlight: { custom: new Map([[PZ.sol[PZ.step].slice(0, 2), 'hint']]) } });
+  }
+  if (id === 'pzsol') {
+    pzFail();
+    PZ.done = true;
+    const mine = PZ;
+    (function next() {
+      if (PZ !== mine || PZ.step >= PZ.sol.length) return pzRender();
+      pzPlay(PZ.sol[PZ.step]);
+      setTimeout(next, 600);
+    })();
+  }
+  if (id === 'rushgo') rushStart();
+};
+
+// --- штурм: 3 минуты, 3 ошибки — конец; задачи короткие и с каждой становятся сложнее (как Puzzle Rush на chess.com)
+const RUSH_TIME = 180_000;
+let RUSH = null;
+const rushRating = n => 400 + n * 50; // 1-я задача ~400, 20-я ~1400, 40-я ~2400
+
+async function rushStart() {
+  RUSH = { score: 0, strikes: 0, n: 0, trail: [], end: Date.now() + RUSH_TIME, over: false };
+  RUSH.next = fetchPuzzle(rushRating(0), true);
+  RUSH.timer = setInterval(() => { if (Date.now() >= RUSH.end) rushOver(); else rushRender(); }, 200);
+  await rushNext();
+}
+async function rushNext() {
+  const data = await RUSH.next;
+  RUSH.n++;
+  RUSH.next = fetchPuzzle(rushRating(RUSH.n), true); // следующую грузим заранее
+  if (!RUSH.over) startPuzzle(data);
+}
+function rushResult(ok) {
+  if (RUSH.over) return;
+  PZ.done = true;
+  RUSH.trail.push(ok);
+  if (ok) RUSH.score++; else RUSH.strikes++;
+  if (RUSH.strikes >= 3) return rushOver();
+  rushRender();
+  setTimeout(rushNext, ok ? 250 : 600);
+}
+function rushOver() {
+  if (!RUSH || RUSH.over) return;
+  RUSH.over = true;
+  clearInterval(RUSH.timer);
+  if (PZ) { PZ.done = true; pzShow(undefined); }
+  RUSH.best = Math.max(+localStorage.rushBest || 0, RUSH.score);
+  RUSH.record = RUSH.score > (+localStorage.rushBest || 0);
+  localStorage.rushBest = RUSH.best;
+  play('game-end');
+  rushRender();
+}
+function rushRender() {
+  if (!RUSH) {
+    $('pz').innerHTML = `<h3>Штурм</h3>
+      <div>3 минуты — решите как можно больше задач. Задачи становятся сложнее с каждой решённой.
+      Три ошибки — и штурм окончен.</div>
+      <div class="stat"><span>Рекорд</span><span class="big">${+localStorage.rushBest || 0}</span></div>
+      <div class="row"><button id="rushgo">Начать</button></div>`;
+    return;
+  }
+  const left = Math.max(0, RUSH.end - Date.now()), sec = Math.ceil(left / 1000);
+  const trail = `<div class="trail">${RUSH.trail.map(ok => `<i class="${ok ? 'ok' : 'bad'}">${ok ? '✓' : '✗'}</i>`).join('')}</div>`;
+  if (RUSH.over) {
+    $('pz').innerHTML = `<h3>Штурм окончен</h3>
+      <div class="stat"><span>Решено</span><span class="big">${RUSH.score}</span></div>
+      <div class="msg ${RUSH.record ? 'ok' : ''}">${RUSH.record ? '🏆 Новый рекорд!' : `Рекорд: ${RUSH.best}`}</div>
+      ${trail}<div class="row"><button id="rushgo">Ещё раз</button></div>`;
+    return;
+  }
+  $('pz').innerHTML = `<div class="stat"><span class="timer ${sec <= 20 ? 'low' : ''}">${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</span>
+      <span class="big">${RUSH.score}</span></div>
+    <div class="stat"><span>Ход ${PZ?.color === 'black' ? 'чёрных' : 'белых'}</span>
+      <span class="strikes">${[0, 1, 2].map(i => i < RUSH.strikes ? '<b>✗</b>' : '✗').join('')}</span></div>
+    ${trail}`;
+}
+
+function setMode(m) {
+  if (RUSH && !RUSH.over && m !== 'rush') { clearInterval(RUSH.timer); RUSH = null; }
+  MODE = m;
+  document.body.dataset.mode = m;
+  document.querySelectorAll('.modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  if (m === 'analysis') { PZ = null; cg.set({ orientation: flipped ? 'black' : 'white' }); return refresh(); }
+  if (m === 'puzzle') return nextPuzzle();
+  RUSH = null;
+  PZ = null;
+  cg.set({ orientation: 'white', fen: 'start', lastMove: undefined, check: false, movable: { color: undefined, dests: new Map() } });
+  cg.setAutoShapes([]);
+  $('wrap').querySelectorAll('.badge, .flash').forEach(e => e.remove());
+  rushRender();
+}
+document.querySelector('.modes').onclick = e => { const b = e.target.closest('button'); if (b && b.dataset.mode !== MODE) setMode(b.dataset.mode); };
 $('summary').onclick = e => {
   const t = e.target.closest('td.jump');
   if (!t) return;
@@ -582,6 +819,7 @@ $('mute').onclick = () => setMuted(!muted);
 setMuted(muted);
 document.addEventListener('keydown', e => {
   if (e.target.matches('textarea, input')) return;
+  if (MODE !== 'analysis') { if (e.key === 'Enter' || e.key === 'ArrowRight') $('pznext')?.click(); return; }
   const d = { ArrowLeft: -1, ArrowRight: 1, Home: -999, End: 999 }[e.key];
   if (d) { e.preventDefault(); step(d); }
   if (e.key === 'f') flip();
