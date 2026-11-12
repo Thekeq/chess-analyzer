@@ -3,13 +3,18 @@ import csv
 import gzip
 import json
 import mimetypes
+import os
 import random
 import re
+import secrets
+import sqlite3
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, abort, g, jsonify, request, send_from_directory, session
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import chess
 
@@ -19,6 +24,114 @@ mimetypes.add_type("application/wasm", ".wasm")
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 512 * 1024
 UA = {"User-Agent": "chessanalyze/1.0"}
+
+# --- Accounts: SQLite + signed session cookie. var/ holds the DB and the session key (not in git, survives deploys).
+VAR = Path(__file__).parent / "var"
+VAR.mkdir(exist_ok=True)
+KEY = VAR / "secret_key"
+if not KEY.exists():  # gunicorn workers start together: os.link is an atomic create-if-missing, so all share one key
+    tmp = VAR / f"secret_key.{os.getpid()}"
+    tmp.write_text(secrets.token_hex(32))
+    try:
+        os.link(tmp, KEY)
+    except FileExistsError:
+        pass
+    tmp.unlink()
+app.secret_key = KEY.read_text()
+app.config.update(SESSION_COOKIE_SECURE=True, SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=90 * 86400)
+with sqlite3.connect(VAR / "app.db") as c:
+    c.execute("""CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, pw_hash TEXT NOT NULL,
+        site TEXT, nick TEXT, puzzle_rating INTEGER NOT NULL DEFAULT 1200, puzzle_games INTEGER NOT NULL DEFAULT 0,
+        rush_best INTEGER NOT NULL DEFAULT 0, seen TEXT NOT NULL DEFAULT '[]')""")
+
+
+def db():
+    if "db" not in g:
+        g.db = sqlite3.connect(VAR / "app.db")
+        g.db.row_factory = sqlite3.Row
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(_):
+    if (conn := g.pop("db", None)) is not None:
+        conn.close()
+
+
+def user():
+    return db().execute("SELECT * FROM users WHERE id = ?", (session.get("uid"),)).fetchone()
+
+
+@app.before_request
+def require_login():
+    # the page, engine files and auth endpoints are public; every other API needs an account
+    if request.endpoint not in ("index", "static", "register", "login") and user() is None:
+        session.clear()
+        return jsonify(error="Войдите в аккаунт"), 401
+
+
+def _credentials():
+    d = request.get_json(force=True)
+    return (d.get("username") or "").strip(), d.get("password") or ""
+
+
+def _sign_in(uid):
+    session.clear()
+    session.permanent = True
+    session["uid"] = uid
+    return me()
+
+
+@app.post("/api/auth/register")
+def register():
+    name, pw = _credentials()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{3,20}", name):
+        raise ValueError("Логин: 3–20 символов — латиница, цифры, _ и -")
+    if len(pw) < 6:
+        raise ValueError("Пароль: минимум 6 символов")
+    try:
+        with db():
+            uid = db().execute("INSERT INTO users (username, pw_hash) VALUES (?, ?)",
+                               (name, generate_password_hash(pw))).lastrowid
+    except sqlite3.IntegrityError:
+        raise ValueError("Такой логин уже занят")
+    return _sign_in(uid)
+
+
+@app.post("/api/auth/login")
+def login():
+    name, pw = _credentials()
+    row = db().execute("SELECT id, pw_hash FROM users WHERE username = ?", (name,)).fetchone()
+    if row is None or not check_password_hash(row["pw_hash"], pw):
+        time.sleep(1)  # slows down password guessing
+        raise ValueError("Неверный логин или пароль")
+    return _sign_in(row["id"])
+
+
+@app.post("/api/auth/logout")
+def logout():
+    session.clear()
+    return jsonify()
+
+
+@app.get("/api/me")
+def me():
+    u = user()
+    return jsonify(username=u["username"], site=u["site"], nick=u["nick"], puzzle_rating=u["puzzle_rating"],
+                   puzzle_games=u["puzzle_games"], rush_best=u["rush_best"])
+
+
+@app.post("/api/me")
+def link_account():
+    """Link (or with an empty nick, unlink) the chess.com / lichess nick for the "My games" panel."""
+    d = request.get_json(force=True)
+    site, nick = d.get("site"), (d.get("nick") or "").strip()
+    if nick and (site not in ("chesscom", "lichess") or not re.fullmatch(r"[A-Za-z0-9_-]{2,30}", nick)):
+        raise ValueError("Неверный ник")
+    with db():
+        db().execute("UPDATE users SET site = ?, nick = ? WHERE id = ?", (site if nick else None, nick or None, session["uid"]))
+    return me()
 
 
 @app.after_request
@@ -93,20 +206,54 @@ def judge():
 with gzip.open(Path(__file__).parent / "data" / "puzzles.csv.gz", "rt", encoding="utf-8") as f:
     PUZZLES = list(csv.DictReader(f))
 PUZZLE_RATINGS = [int(p["rating"]) for p in PUZZLES]
+PUZZLE_BY_ID = {p["id"]: p for p in PUZZLES}
 
 
 @app.get("/api/puzzle")
 def puzzle():
-    """Random puzzle near ?rating=; ?short=1 keeps only 1-2 move puzzles (puzzle rush)."""
-    rating = min(max(request.args.get("rating", 1200, type=int), PUZZLE_RATINGS[0]), PUZZLE_RATINGS[-1])
-    short = request.args.get("short") == "1"
+    """Random unseen puzzle near the user's puzzle rating, or near ?rating= with ?short=1 (1-2 moves, puzzle rush)."""
+    u = user()
+    rating = request.args.get("rating", u["puzzle_rating"], type=int)
+    rating = min(max(rating, PUZZLE_RATINGS[0]), PUZZLE_RATINGS[-1])
+    short, seen = request.args.get("short") == "1", set(json.loads(u["seen"]))
     for spread in (50, 100, 200, 400, 3000):
         lo = bisect.bisect_left(PUZZLE_RATINGS, rating - spread)
         hi = bisect.bisect_right(PUZZLE_RATINGS, rating + spread)
-        pool = [p for p in PUZZLES[lo:hi] if not short or len(p["moves"].split()) <= 4]
+        pool = [p for p in PUZZLES[lo:hi] if p["id"] not in seen and (not short or len(p["moves"].split()) <= 4)]
         if pool:
-            return jsonify(random.choice(pool))
+            p = random.choice(pool)
+            session["pz"] = p["id"]  # the only puzzle a rated result is accepted for
+            return jsonify(p)
     abort(404)
+
+
+@app.post("/api/puzzle/result")
+def puzzle_result():
+    """First attempt at the last served puzzle: Elo update against the puzzle's rating."""
+    d = request.get_json(force=True)
+    p = PUZZLE_BY_ID.get(d.get("id"))
+    if p is None or session.pop("pz", None) != p["id"]:
+        raise ValueError("Результат этой задачи уже учтён")
+    u = user()
+    expected = 1 / (1 + 10 ** ((int(p["rating"]) - u["puzzle_rating"]) / 400))
+    delta = round((40 if u["puzzle_games"] < 30 else 20) * ((1 if d.get("win") else 0) - expected))  # faster at first
+    rating, seen = max(100, u["puzzle_rating"] + delta), (json.loads(u["seen"]) + [p["id"]])[-500:]
+    with db():
+        db().execute("UPDATE users SET puzzle_rating = ?, puzzle_games = puzzle_games + 1, seen = ? WHERE id = ?",
+                     (rating, json.dumps(seen), u["id"]))
+    return jsonify(delta=delta, rating=rating, games=u["puzzle_games"] + 1)
+
+
+@app.post("/api/rush/result")
+def rush_result():
+    score = int(request.get_json(force=True).get("score"))
+    if not 0 <= score <= 500:
+        raise ValueError("Неверный счёт")
+    best = user()["rush_best"]
+    if score > best:
+        with db():
+            db().execute("UPDATE users SET rush_best = ? WHERE id = ?", (score, session["uid"]))
+    return jsonify(best=max(score, best), record=score > best)
 
 
 PAGE = 5

@@ -113,7 +113,19 @@
   .modes { display: flex; gap: 4px; }
   .modes button { background: #3c3a37; padding: 7px 12px; }
   .modes button.on { background: #81b64c; }
-  body:not([data-mode=analysis]) :is(.load, #mygames, #evalbar, #summary, #comment, #moves, .nav, .pbar) { display: none !important; }
+  body:not([data-mode=analysis]) :is(#summary, #comment, #moves, .nav) { display: none !important; }
+  /* visibility, не display: пустое место остаётся, и доска не прыгает при переключении режимов */
+  body:not([data-mode=analysis]) :is(.load, #mygames, #evalbar, .pbar) { visibility: hidden; }
+  @media (max-width: 1360px) { body:not([data-mode=analysis]) #mygames { display: none; } }
+  body[data-auth=out] > :not(#auth, script) { display: none !important; }
+  #auth { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+  body[data-auth=in] #auth { display: none; }
+  #auth form { width: min(92vw, 340px); display: flex; flex-direction: column; gap: 10px; padding: 22px; }
+  #auth .brand { text-align: center; font-size: 26px; margin: 0 0 6px; }
+  #auth .tabs { display: flex; gap: 6px; } #auth .tabs button { flex: 1; background: #3c3a37; }
+  #auth .tabs button.on { background: #81b64c; }
+  #autherr { color: #fa7a6a; min-height: 1.2em; font-size: 13px; }
+  dialog .wide { width: 100%; margin-top: 8px; }
   body[data-mode=analysis] #pz { display: none; }
   #pz { display: flex; flex-direction: column; gap: 10px; }
   #pz h3 { margin: 0; font-size: 18px; }
@@ -140,6 +152,7 @@
     #acctbtn { padding: 6px 10px; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; }
     .load { order: 3; flex-basis: 100%; flex-wrap: nowrap; }
     .modes { order: 2; flex-basis: 100%; } .modes button { flex: 1; }
+    body:not([data-mode=analysis]) .load { display: none; }
     .load textarea { flex: 1; height: 38px; min-height: 38px; font-size: 13px; }
     #status { padding: 4px; font-size: 13px; }
     main { padding: 4px 8px 72px; gap: 8px; }
@@ -162,7 +175,17 @@
   }
 </style>
 </head>
-<body data-mode="analysis">
+<body data-mode="analysis" data-auth="out">
+<div id="auth">
+  <form class="card">
+    <div class="brand">Chess<span>Analyze</span></div>
+    <div class="tabs"><button type="button" data-t="login" class="on">Вход</button><button type="button" data-t="register">Регистрация</button></div>
+    <input name="username" placeholder="Логин" autocomplete="username" required>
+    <input name="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+    <div id="autherr"></div>
+    <button type="submit" id="authgo">Войти</button>
+  </form>
+</div>
 <header>
   <a class="brand" href="/" title="На главную">Chess<span>Analyze</span></a>
   <nav class="modes"><button data-mode="analysis" class="on">Анализ</button><button data-mode="puzzle">Задачи</button><button data-mode="rush">Штурм</button></nav>
@@ -176,17 +199,18 @@
 <div id="status"></div>
 <dialog id="acct">
   <form method="dialog">
-    <h3>Мой аккаунт</h3>
+    <h3>Аккаунт <span id="whoami" class="hint"></span></h3>
+    <div class="hint" style="margin-bottom:8px">Ник chess.com или lichess для списка «Мои партии»</div>
     <div class="sites">
       <label><input type="radio" name="site" value="chesscom" checked> chess.com</label>
       <label><input type="radio" name="site" value="lichess"> lichess</label>
     </div>
-    <input name="user" placeholder="Ник" required pattern="[A-Za-z0-9_\-]{2,30}" autocomplete="off">
+    <input name="user" placeholder="Ник (пусто — отвязать)" pattern="[A-Za-z0-9_\-]{2,30}" autocomplete="off">
     <menu>
       <button value="save">Сохранить</button>
-      <button value="logout" class="ghost" formnovalidate>Выйти</button>
       <button value="cancel" class="ghost" formnovalidate>Отмена</button>
     </menu>
+    <button value="logout" class="ghost wide" formnovalidate>Выйти из аккаунта</button>
   </form>
 </dialog>
 <main>
@@ -235,6 +259,7 @@ const progress = frac => $('progress').firstElementChild.style.width = frac * 10
 async function api(url, body) {
   const r = await fetch(url, body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && !url.startsWith('/api/auth')) showAuth(); // сессия кончилась — снова экран входа
   if (!r.ok) throw new Error(j.error || `Ошибка сервера (${r.status})`);
   return j;
 }
@@ -522,7 +547,7 @@ async function run(input, asBlack = false) {
 
 $('go').onclick = () => run($('input').value);
 // --- Аккаунт: ник хранится в браузере, слева последние 5 партий
-let account = JSON.parse(localStorage.account || 'null');
+let account = null; // привязанный ник { site, user } — хранится в аккаунте на сервере
 const SITE = { chesscom: 'chess.com', lichess: 'lichess' };
 
 let gamesPage = 0;
@@ -530,9 +555,8 @@ let gamesPage = 0;
 async function loadMyGames(page = gamesPage) {
   gamesPage = page;
   const box = $('mygames');
-  $('acctbtn').textContent = account ? '👤 ' + account.user : 'Аккаунт';
   if (!account) {
-    box.innerHTML = '<div class="hint">Нажмите «Аккаунт» и укажите ник — здесь будут ваши последние партии.</div>';
+    box.innerHTML = '<div class="hint">Нажмите «Аккаунт» и укажите ник chess.com или lichess — здесь будут ваши последние партии.</div>';
     return;
   }
   const top = `<div class="top">Мои партии <small>${esc(SITE[account.site])}</small><button id="reload" title="Обновить">↻</button></div>`;
@@ -577,21 +601,57 @@ $('acctbtn').onclick = () => {
   f.user.value = account?.user || '';
   $('acct').showModal();
 };
-$('acct').onclose = () => {
+$('acct').onclose = async () => {
   const f = $('acct').querySelector('form'), v = $('acct').returnValue;
-  if (v === 'save') account = { site: f.site.value, user: f.user.value.trim() };
-  else if (v === 'logout') account = null;
-  else return;
-  localStorage.account = JSON.stringify(account);
+  if (v === 'logout') { await api('/api/auth/logout', {}); return location.assign('/'); }
+  if (v !== 'save') return;
+  try { applyMe(await api('/api/me', { site: f.site.value, nick: f.user.value.trim() })); } catch (e) { return status(e.message, true); }
   loadMyGames(0);
 };
-loadMyGames();
+
+// --- Вход: без аккаунта сайт не работает; рейтинг задач, рекорд штурма и ник хранятся на сервере
+let ME = null, authMode = 'login';
+function showAuth() {
+  document.body.dataset.auth = 'out';
+  $('auth').querySelector('[name=username]').focus();
+}
+function applyMe(me) {
+  ME = me;
+  account = me.nick ? { site: me.site, user: me.nick } : null;
+  $('acctbtn').textContent = '👤 ' + me.username;
+  $('whoami').textContent = me.username;
+}
+$('auth').querySelector('.tabs').onclick = e => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  authMode = t.dataset.t;
+  $('auth').querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b === t));
+  $('authgo').textContent = authMode === 'login' ? 'Войти' : 'Создать аккаунт';
+  $('auth').querySelector('[name=password]').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+};
+$('auth').querySelector('form').onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target;
+  $('autherr').textContent = '';
+  try {
+    applyMe(await api('/api/auth/' + authMode, { username: f.username.value.trim(), password: f.password.value }));
+  } catch (err) { $('autherr').textContent = err.message; return; }
+  f.password.value = '';
+  start();
+};
+function start() { // после входа
+  document.body.dataset.auth = 'in';
+  PR.rating = ME.puzzle_rating;
+  PR.games = ME.puzzle_games;
+  loadMyGames(0);
+  cg.redrawAll();
+  if (location.hash.length > 1) run(decodeURIComponent(location.hash.slice(1))); // /#https://lichess.org/xxxx
+}
 
 // ===================== Задачи и штурм (база задач lichess, CC0) =====================
 let MODE = 'analysis';
 let PZ = null; // текущая задача: { data, game, sol: [uci], step, color, failed, done }
-const PR = Object.assign({ rating: 1200, games: 0 }, JSON.parse(localStorage.puzzleRating || '{}')); // рейтинг задач
-const seenPuzzles = new Set(JSON.parse(localStorage.seenPuzzles || '[]'));
+const PR = { rating: 1200, games: 0 }; // рейтинг задач (с сервера)
 const THEMES = {
   mate: 'Мат', mateIn1: 'Мат в 1', mateIn2: 'Мат в 2', mateIn3: 'Мат в 3', mateIn4: 'Мат в 4', fork: 'Вилка', pin: 'Связка',
   skewer: 'Сквозной удар', hangingPiece: 'Висящая фигура', sacrifice: 'Жертва', discoveredAttack: 'Вскрытое нападение',
@@ -602,15 +662,8 @@ const THEMES = {
   smotheredMate: 'Спёртый мат', exposedKing: 'Открытый король', kingsideAttack: 'Атака на короля', defensiveMove: 'Защита',
 };
 
-async function fetchPuzzle(rating, short) {
-  for (let i = 0; i < 5; i++) { // избегаем недавно решённых
-    const p = await api(`/api/puzzle?rating=${Math.round(rating)}${short ? '&short=1' : ''}`);
-    if (!seenPuzzles.has(p.id) || i === 4) {
-      seenPuzzles.add(p.id);
-      localStorage.seenPuzzles = JSON.stringify([...seenPuzzles].slice(-500));
-      return p;
-    }
-  }
+async function fetchPuzzle(rating, short) { // без rating — под рейтинг игрока; уже сыгранные сервер не выдаёт
+  return api(rating === undefined ? '/api/puzzle' : `/api/puzzle?rating=${Math.round(rating)}${short ? '&short=1' : ''}`);
 }
 
 function pzMovable() {
@@ -667,18 +720,22 @@ function puzzleMove(orig, dest) {
   setTimeout(() => { if (PZ === mine) pzPlay(PZ.sol[PZ.step]); }, 300);
 }
 
-// --- рейтинговые задачи: Эло против рейтинга задачи, засчитывается только первая попытка
-function rate(win) {
-  const expected = 1 / (1 + 10 ** ((+PZ.data.rating - PR.rating) / 400));
-  const delta = Math.round((PR.games < 30 ? 40 : 20) * ((win ? 1 : 0) - expected)); // первые 30 задач рейтинг меняется быстрее
-  PR.rating = Math.max(100, PR.rating + delta);
-  PR.games++;
-  localStorage.puzzleRating = JSON.stringify(PR);
-  return delta;
+// --- рейтинговые задачи: Эло против рейтинга задачи считает сервер, засчитывается только первая попытка
+async function rate(p, win) {
+  try {
+    const r = await api('/api/puzzle/result', { id: p.data.id, win });
+    Object.assign(PR, { rating: r.rating, games: r.games });
+    p.delta = r.delta;
+  } catch (e) { status(e.message, true); }
+  if (PZ === p) pzRender();
 }
-function pzSolved() { if (!PZ.failed) PZ.delta = rate(true); PZ.result = 'ok'; pzRender(); }
-function pzFail() { if (!PZ.failed) { PZ.failed = true; PZ.delta = rate(false); } PZ.result = 'bad'; pzRender(); }
-async function nextPuzzle() { $('pz').innerHTML = '<span class="hint">Загрузка задачи…</span>'; startPuzzle(await fetchPuzzle(PR.rating)); }
+async function pzSolved() { PZ.result = 'ok'; pzRender(); if (!PZ.failed) await rate(PZ, true); }
+async function pzFail() {
+  PZ.result = 'bad';
+  pzRender();
+  if (!PZ.failed) { PZ.failed = true; await rate(PZ, false); }
+}
+async function nextPuzzle() { $('pz').innerHTML = '<span class="hint">Загрузка задачи…</span>'; startPuzzle(await fetchPuzzle()); }
 
 function pzRender() {
   if (MODE === 'rush') return rushRender();
@@ -698,10 +755,10 @@ function pzRender() {
     <div class="tags">Сыграно задач: ${PR.games}. Подсказка, решение или пропуск засчитываются как неудача.</div>`;
 }
 
-$('pz').onclick = e => {
+$('pz').onclick = async e => {
   const id = e.target.id;
   if (id === 'pznext') {
-    if (MODE === 'puzzle' && PZ && !PZ.done && !PZ.failed && PZ.step > 0) pzFail(); // пропуск = неудача
+    if (MODE === 'puzzle' && PZ && !PZ.done && !PZ.failed && PZ.step > 0) await pzFail(); // пропуск = неудача (до новой задачи)
     return MODE === 'rush' ? null : nextPuzzle();
   }
   if (id === 'pzhint' && PZ.step % 2 === 1) {
@@ -752,18 +809,19 @@ function rushOver() {
   RUSH.over = true;
   clearInterval(RUSH.timer);
   if (PZ) { PZ.done = true; pzShow(undefined); }
-  RUSH.best = Math.max(+localStorage.rushBest || 0, RUSH.score);
-  RUSH.record = RUSH.score > (+localStorage.rushBest || 0);
-  localStorage.rushBest = RUSH.best;
   play('game-end');
+  RUSH.best = Math.max(ME.rush_best, RUSH.score);
+  RUSH.record = RUSH.score > ME.rush_best;
+  ME.rush_best = RUSH.best;
   rushRender();
+  api('/api/rush/result', { score: RUSH.score }).catch(e => status(e.message, true));
 }
 function rushRender() {
   if (!RUSH) {
     $('pz').innerHTML = `<h3>Штурм</h3>
       <div>3 минуты — решите как можно больше задач. Задачи становятся сложнее с каждой решённой.
       Три ошибки — и штурм окончен.</div>
-      <div class="stat"><span>Рекорд</span><span class="big">${+localStorage.rushBest || 0}</span></div>
+      <div class="stat"><span>Рекорд</span><span class="big">${ME.rush_best}</span></div>
       <div class="row"><button id="rushgo">Начать</button></div>`;
     return;
   }
@@ -807,7 +865,7 @@ $('summary').onclick = e => {
 };
 $('moves').onclick = e => { const t = e.target.closest('.mv'); if (t) go(+t.dataset.i); };
 flip(false);
-if (location.hash.length > 1) run(decodeURIComponent(location.hash.slice(1))); // /#https://lichess.org/xxxx
+api('/api/me').then(me => { applyMe(me); start(); }, () => showAuth());
 document.querySelectorAll('.nav [data-d]').forEach(b => b.onclick = () => step(+b.dataset.d));
 $('comment').onclick = e => {
   if (e.target.id === 'tomain') return go(VAR.base);
