@@ -348,9 +348,16 @@ const evalText = (sc, m) => m?.san.endsWith('#') ? (sc.wp > .5 ? '1-0' : '0-1')
   : 'mate' in sc ? 'M' + Math.abs(sc.mate) : (Math.abs(sc.cp) / 100).toFixed(1);
 
 // --- Звуки
-const SND = Object.fromEntries(['move-self', 'move-opponent', 'move-check', 'capture', 'castle',
-  'promote', 'game-end', 'game-start', 'brilliant-move', 'puzzle-correct', 'puzzle-wrong']
-  .map(n => [n, new Audio(`/static/sounds/${n}.mp3`)]));
+// Громкость файлов разная: замерено (макс. RMS за 50 мс, дБ) и выровнено под звук хода
+const LOUDNESS = {
+  'move-self': -26.5, 'move-opponent': -30.2, 'move-check': -25.8, capture: -25.3, castle: -26.1, promote: -26.1,
+  'game-end': -22.0, 'game-start': -21.6, 'brilliant-move': -15.2, 'puzzle-correct': -6.1, 'puzzle-wrong': -3.0,
+};
+const SND = Object.fromEntries(Object.entries(LOUDNESS).map(([n, db]) => {
+  const a = new Audio(`/static/sounds/${n}.mp3`);
+  a.volume = Math.min(1, 10 ** ((LOUDNESS['move-self'] - db) / 20)); // только тише: громче 1.0 браузер не умеет
+  return [n, a];
+}));
 let muted = localStorage.muted === '1';
 const play = name => {
   if (muted) return;
