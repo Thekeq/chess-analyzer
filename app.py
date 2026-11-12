@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from flask import Flask, abort, g, jsonify, request, send_from_directory, session
+from flask import Flask, Response, abort, g, jsonify, request, send_from_directory, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import chess
@@ -66,7 +66,7 @@ def user():
 @app.before_request
 def require_login():
     # the page, engine files and auth endpoints are public; every other API needs an account
-    if request.endpoint not in ("index", "static", "register", "login") and user() is None:
+    if request.endpoint not in ("index", "static", "robots", "sitemap", "register", "login") and user() is None:
         session.clear()
         return jsonify(error="Войдите в аккаунт"), 401
 
@@ -163,6 +163,17 @@ def upstream(e):
 @app.get("/")
 def index():
     return send_from_directory("static", "index.html")
+
+
+@app.get("/robots.txt")
+def robots():
+    return Response(f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://{request.host}/sitemap.xml\n", mimetype="text/plain")
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    return Response('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                    f"<url><loc>https://{request.host}/</loc></url></urlset>\n", mimetype="application/xml")
 
 
 @app.post("/api/game")
