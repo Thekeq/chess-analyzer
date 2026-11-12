@@ -48,6 +48,7 @@
   /* ---------- controls: one height for everything ---------- */
   textarea, input, button { font: inherit; color: inherit; }
   input, textarea { height: var(--ctl); padding: 0 12px; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-sm); }
+  input[type=radio] { height: auto; padding: 0; margin: 0; accent-color: var(--accent); } /* not a text field */
   input::placeholder, textarea::placeholder { color: var(--muted); }
   input:focus, textarea:focus { outline: none; border-color: var(--accent); }
   button { height: var(--ctl); padding: 0 16px; border: 0; border-radius: var(--r-sm); background: var(--accent); color: #fff;
@@ -134,8 +135,9 @@
   @keyframes glow { from { box-shadow: 0 0 0 0 var(--c); } to { box-shadow: 0 0 0 3cqi transparent; } }
   @keyframes flash { 0% { opacity: .9; scale: .6; } 40% { opacity: .7; scale: 1.15; } 100% { opacity: 0; scale: 1; } }
 
-  /* side panel: top aligned with the player bar, bottom with the board column */
-  .side { width: 380px; max-height: calc(var(--bs) + 2 * var(--pbar)); display: flex; flex-direction: column; gap: 12px; }
+  /* side panel: same top and bottom as the board */
+  .side { width: 380px; max-height: var(--bs); display: flex; flex-direction: column; gap: 12px; }
+  .mygames, .side { margin-top: var(--pbar); } /* side columns line up with the board, not the player bar above it */
   .ic { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: #fff; flex: none;
         font: 800 9px/1 var(--body); font-style: normal; vertical-align: middle; position: relative; top: -1px; margin-right: 6px; }
   .ic svg, .badge svg { width: 68%; height: 68%; fill: currentColor; }
@@ -224,6 +226,7 @@
   dialog::backdrop { background: #000a; backdrop-filter: blur(2px); }
   dialog h3 { margin: 0 0 6px; font: 700 16px var(--display); }
   dialog .sites { display: flex; gap: 20px; margin: 12px 0; }
+  dialog .sites label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
   dialog input[name=user] { width: 100%; }
   dialog menu { display: flex; gap: 8px; padding: 0; margin: 16px 0 0; } dialog menu button { flex: 1; }
   dialog .wide { width: 100%; margin-top: 8px; }
@@ -231,7 +234,7 @@
   /* ---------- responsive ---------- */
   @media (max-width: 1360px) {
     main { grid-template-columns: auto 380px; }
-    .mygames { grid-column: 1 / -1; }
+    .mygames { grid-column: 1 / -1; margin-top: 0; }
     .mygames ul { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
     .pager { max-width: 420px; margin-inline: auto; }
     body:not([data-mode=analysis]) #mygames { display: none; }
@@ -241,7 +244,7 @@
     main { grid-template-columns: minmax(0, 1fr); justify-items: center; } /* minmax(0,…): the games strip must not widen the column */
     main > * { min-width: 0; }
     .mygames, .side { width: min(100%, calc(var(--bs) + 32px)); }
-    .side { max-height: none; } #moves { max-height: 300px; } #comment { order: -1; }
+    .side { max-height: none; margin-top: 0; } #moves { max-height: 300px; } #comment { order: -1; }
   }
   @media (max-width: 700px) {
     /* phone: full-width board, games as a strip, navigation at the bottom under the thumb */
