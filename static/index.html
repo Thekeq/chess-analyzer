@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ChessTrainer — анализ партий, задачи и штурм</title>
-<meta name="description" content="Бесплатный анализ шахматных партий с chess.com и lichess на Stockfish 17: оценка каждого хода как на chess.com, точность, задачи с рейтингом и тактический штурм на 3 минуты.">
+<title>ChessTrainer — free chess game analysis, puzzles and puzzle rush</title>
+<meta name="description" content="Free chess game analysis for chess.com and lichess with Stockfish 17: every move graded like chess.com Game Review, accuracy, rated puzzles and 3-minute Puzzle Rush.">
 <meta name="theme-color" content="#21201d">
 <link rel="canonical" href="https://chess.thekeq.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ChessTrainer">
-<meta property="og:title" content="ChessTrainer — анализ партий, задачи и штурм">
-<meta property="og:description" content="Анализ партий chess.com и lichess на Stockfish 17 с оценкой каждого хода, задачи с рейтингом и тактический штурм.">
+<meta property="og:title" content="ChessTrainer — free chess game analysis, puzzles and puzzle rush">
+<meta property="og:description" content="Analyse chess.com and lichess games with Stockfish 17, every move graded. Rated puzzles and Puzzle Rush.">
 <meta property="og:url" content="https://chess.thekeq.com/">
 <link rel="preload" href="/static/fonts/onest-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/static/fonts/unbounded-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="/static/vendor/chessground.brown.css">
 <link rel="stylesheet" href="/static/vendor/chessground.cburnett.css">
 <style>
-  /* ---------- шрифты (локально: COEP не пускает внешние) ---------- */
+  /* ---------- fonts (self-hosted: COEP blocks third-party fonts) ---------- */
   @font-face { font-family: Onest; src: url(/static/fonts/onest-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; font-display: swap;
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
   @font-face { font-family: Onest; src: url(/static/fonts/onest-cyrillic-wght-normal.woff2) format('woff2'); font-weight: 100 900; font-display: swap;
@@ -32,20 +32,20 @@
   @font-face { font-family: 'JetBrains Mono'; src: url(/static/fonts/jetbrains-mono-cyrillic-wght-normal.woff2) format('woff2'); font-weight: 100 800; font-display: swap;
     unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
 
-  /* ---------- токены ---------- */
+  /* ---------- tokens ---------- */
   :root {
     --bg: #21201d; --surface: #2a2825; --raised: #36332f; --hover: #413d38; --line: #3d3934;
     --text: #efece6; --muted: #a29d94; --accent: #81b64c; --accent-hi: #95c95f; --danger: #f0503c;
     --r: 12px; --r-sm: 8px; --ctl: 40px; --gap: 20px; --pbar: 40px;
     --display: Unbounded, system-ui, sans-serif; --body: Onest, system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, monospace;
-    --bs: max(280px, min(92vw, calc(100vh - 230px), 640px)); /* сторона доски */
+    --bs: max(280px, min(92vw, calc(100vh - 230px), 640px)); /* board side */
   }
   * { box-sizing: border-box; }
   html { color-scheme: dark; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 var(--body); -webkit-font-smoothing: antialiased; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* ---------- контролы: одна высота у всего ---------- */
+  /* ---------- controls: one height for everything ---------- */
   textarea, input, button { font: inherit; color: inherit; }
   input, textarea { height: var(--ctl); padding: 0 12px; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-sm); }
   input::placeholder, textarea::placeholder { color: var(--muted); }
@@ -57,13 +57,13 @@
   button.ghost:hover:not(:disabled), .ghostbtn:hover:not(:disabled) { background: var(--hover); }
   button:disabled { opacity: .45; cursor: default; }
 
-  /* ---------- шапка ---------- */
+  /* ---------- header ---------- */
   header { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 16px; height: 64px; padding: 0 24px;
            background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
   .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none;
            font: 700 18px/1 var(--display); letter-spacing: -.02em; }
   .brand b { color: var(--accent); font-weight: 700; }
-  .mark { width: 26px; height: 26px; border-radius: 6px; flex: none;   /* знак: угол доски 2×2 */
+  .mark { width: 26px; height: 26px; border-radius: 6px; flex: none;   /* logo mark: a 2×2 board corner */
           background: conic-gradient(var(--accent) 0 25%, #f0d9b5 0 50%, var(--accent) 0 75%, #f0d9b5 0); }
   .modes { display: flex; gap: 2px; padding: 3px; background: var(--raised); border-radius: 10px; }
   .modes button { height: 34px; padding: 0 14px; background: transparent; color: var(--muted); border-radius: 7px; }
@@ -79,13 +79,13 @@
   #status { height: 28px; padding: 4px 24px; text-align: center; color: var(--muted); font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   #status.err { color: var(--danger); }
 
-  /* ---------- раскладка: игры | доска | панель ---------- */
+  /* ---------- layout: games | board | panel ---------- */
   main { display: grid; grid-template-columns: 260px auto 380px; justify-content: center; align-items: start; gap: var(--gap); padding: 0 24px 32px; }
   .card { background: var(--surface); border: 1px solid #ffffff08; border-radius: var(--r); padding: 16px; }
   .card:empty, #moves:empty { display: none; }
   .hint { color: var(--muted); }
 
-  /* мои партии */
+  /* my games */
   .mygames { padding: 12px; }
   .mygames .top { display: flex; align-items: center; gap: 8px; height: 32px; margin-bottom: 8px; padding-left: 4px; font-weight: 700; }
   .mygames .top small { color: var(--muted); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -104,7 +104,7 @@
   .pager button:hover:not(:disabled) { background: var(--hover); }
   .pager span { color: var(--muted); font-size: 12px; }
 
-  /* доска */
+  /* board */
   .pbar { display: flex; align-items: center; gap: 10px; height: var(--pbar); padding-left: 32px; font-weight: 600; }
   .pbar .elo { color: var(--muted); font: 500 13px var(--mono); }
   .pbar i { width: 22px; height: 22px; border-radius: 6px; box-shadow: inset 0 0 0 1px #0005; }
@@ -122,9 +122,9 @@
   #wrap coords.ranks { top: 0; left: 4px; } #wrap coords.ranks coord { transform: none; padding-top: 3px; }
   #wrap coords.files { left: 0; bottom: 0; height: auto; } #wrap coords.files coord { text-align: right; padding: 0 4px 2px 0; }
   #wrap cg-board square.last-move { background-color: var(--hl, rgba(155, 199, 0, .41)); }
-  #wrap cg-board square.marked { background-color: rgba(235, 97, 80, .8); } /* ПКМ по клетке */
+  #wrap cg-board square.marked { background-color: rgba(235, 97, 80, .8); } /* right-click on a square */
   #wrap cg-board square.hint { background: rgba(80, 160, 255, .55); }
-  #wrap svg.cg-shapes circle { display: none; } /* вместо кружков chessground красим клетку целиком */
+  #wrap svg.cg-shapes circle { display: none; } /* fill the whole square instead of chessground circles */
   .badge { position: absolute; z-index: 5; width: 5.4cqi; height: 5.4cqi; border-radius: 50%; display: grid; place-items: center;
            translate: -60% -40%; color: #fff; font: 800 2.4cqi var(--body); box-shadow: 0 2px 6px #0009;
            pointer-events: none; animation: pop .35s ease-out; }
@@ -134,13 +134,13 @@
   @keyframes glow { from { box-shadow: 0 0 0 0 var(--c); } to { box-shadow: 0 0 0 3cqi transparent; } }
   @keyframes flash { 0% { opacity: .9; scale: .6; } 40% { opacity: .7; scale: 1.15; } 100% { opacity: 0; scale: 1; } }
 
-  /* правая панель: сверху вровень с плашкой игрока, снизу — с доской */
+  /* side panel: top aligned with the player bar, bottom with the board column */
   .side { width: 380px; max-height: calc(var(--bs) + 2 * var(--pbar)); display: flex; flex-direction: column; gap: 12px; }
   .ic { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: #fff; flex: none;
         font: 800 9px/1 var(--body); font-style: normal; vertical-align: middle; position: relative; top: -1px; margin-right: 6px; }
   .ic svg, .badge svg { width: 68%; height: 68%; fill: currentColor; }
 
-  /* итог: точность — цифры-табло */
+  /* summary: accuracy as scoreboard numerals */
   .players { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; text-align: center; gap: 12px; }
   .players .lbl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; padding-bottom: 14px; }
   .players .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 14px; }
@@ -153,7 +153,7 @@
   td:first-child, td:last-child { width: 44px; text-align: center; font: 600 14px var(--mono); }
   td.jump { cursor: pointer; border-radius: 6px; } td.jump:hover { background: var(--raised); color: var(--accent-hi); }
 
-  /* комментарий к ходу */
+  /* move comment */
   #comment { flex: none; }
   #comment .head { display: flex; align-items: center; gap: 2px; font-size: 16px; min-height: 28px; }
   #comment .head b { font-family: var(--mono); font-weight: 700; }
@@ -166,10 +166,10 @@
   .vmv { padding: 3px 6px; border-radius: 6px; cursor: pointer; font-family: var(--mono); }
   .vmv:hover { background: var(--raised); } .vmv.cur { background: var(--hover); font-weight: 700; }
 
-  /* список ходов */
+  /* move list */
   #moves { position: relative; flex: 1; min-height: 120px; overflow: auto; display: grid; grid-template-columns: 44px 1fr 1fr;
            align-content: start; padding: 8px; font-family: var(--mono); font-size: 14px; }
-  #moves > :nth-child(6n+4), #moves > :nth-child(6n+5), #moves > :nth-child(6n+6) { background: #ffffff05; } /* полоски по строкам */
+  #moves > :nth-child(6n+4), #moves > :nth-child(6n+5), #moves > :nth-child(6n+6) { background: #ffffff05; } /* striped rows */
   #moves .no { color: var(--muted); padding: 5px 0 5px 8px; }
   .mv { padding: 5px 8px; cursor: pointer; border-radius: 6px; white-space: nowrap; }
   .mv:hover { background: var(--raised); } .mv.cur { background: var(--hover); font-weight: 700; }
@@ -177,13 +177,13 @@
   .nav button { height: 44px; padding: 0; background: var(--surface); color: var(--text); font-size: 17px; border: 1px solid #ffffff08; }
   .nav button:hover:not(:disabled) { background: var(--raised); }
 
-  /* ---------- режимы ---------- */
+  /* ---------- modes ---------- */
   body:not([data-mode=analysis]) :is(#summary, #comment, #moves, .nav) { display: none !important; }
-  /* visibility, не display: место остаётся, доска не прыгает при переключении режимов */
+  /* visibility, not display: the space stays, so the board does not jump between modes */
   body:not([data-mode=analysis]) :is(.load, #mygames, #evalbar, .pbar) { visibility: hidden; }
   body[data-mode=analysis] #pz { display: none; }
 
-  /* задачи и штурм */
+  /* puzzles and rush */
   #pz { display: flex; flex-direction: column; gap: 14px; }
   #pz h3 { margin: 0; font: 700 16px var(--display); letter-spacing: -.01em; }
   #pz .stat { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
@@ -196,35 +196,30 @@
   #pz .row { display: flex; gap: 8px; } #pz .row button { flex: 1; }
   #pz .tags { color: var(--muted); font-size: 13px; }
   #pz .timer { font: 700 44px/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -.03em;
-               padding: 14px 18px; border-radius: var(--r-sm); background: #151412; box-shadow: inset 0 0 0 1px var(--line); } /* как шахматные часы */
+               padding: 14px 18px; border-radius: var(--r-sm); background: #151412; box-shadow: inset 0 0 0 1px var(--line); } /* like a chess clock */
   #pz .timer.low { color: var(--danger); }
   #pz .strikes { font-size: 20px; letter-spacing: 6px; color: var(--hover); } #pz .strikes b { color: var(--danger); }
   #pz .trail { display: flex; flex-wrap: wrap; gap: 4px; }
   #pz .trail i { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 800; color: #fff; }
   #pz .trail i.ok { background: var(--accent); } #pz .trail i.bad { background: var(--danger); }
 
-  /* ---------- вход ---------- */
-  body[data-auth=out] > :not(#auth, script) { display: none !important; }
-  body[data-auth=in] #auth { display: none; }
-  #auth { min-height: 100vh; display: grid; place-items: center; padding: 16px;
-          background: radial-gradient(60vmax 60vmax at 50% -10%, #81b64c1a, transparent 60%); }
-  #auth form { width: min(92vw, 360px); display: flex; flex-direction: column; gap: 12px; padding: 28px; }
-  #auth .brand { justify-content: center; font-size: 24px; margin-bottom: 2px; }
-  #auth .mark { width: 32px; height: 32px; border-radius: 8px; }
-  #auth .tagline { text-align: center; color: var(--muted); font-size: 14px; margin: 0 0 8px; }
-  #auth .tabs { display: flex; gap: 2px; padding: 3px; background: var(--raised); border-radius: 10px; }
-  #auth .tabs button { flex: 1; height: 34px; background: transparent; color: var(--muted); border-radius: 7px; }
-  #auth .tabs button.on { background: var(--accent); color: #fff; }
-  #auth input { height: 44px; }
-  #auth button[type=submit] { height: 44px; }
+  /* ---------- sign-in dialog ---------- */
+  #authdlg { width: min(92vw, 380px); padding: 28px; }
+  #authdlg form { display: flex; flex-direction: column; gap: 12px; }
+  #authdlg .brand { justify-content: center; font-size: 22px; }
+  #authdlg .mark { width: 30px; height: 30px; border-radius: 8px; }
+  #authdlg .tagline { text-align: center; color: var(--muted); font-size: 13px; margin: 0 0 4px; }
+  #authdlg .tabs { display: flex; gap: 2px; padding: 3px; background: var(--raised); border-radius: 10px; }
+  #authdlg .tabs button { flex: 1; height: 34px; background: transparent; color: var(--muted); border-radius: 7px; }
+  #authdlg .tabs button.on { background: var(--accent); color: #fff; }
+  #authdlg input, #authdlg button[type=submit] { height: 44px; }
   #autherr { color: var(--danger); font-size: 13px; } #autherr:empty { display: none; }
-  #auth { grid-auto-rows: min-content; align-content: center; gap: 24px; }
-  #auth .features { width: min(92vw, 360px); margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; color: var(--muted); font-size: 13px; }
-  #auth .features li { padding-left: 16px; position: relative; }
-  #auth .features li::before { content: ''; position: absolute; left: 0; top: .55em; width: 6px; height: 6px; border-radius: 2px; background: var(--accent); }
-  #auth .features b { color: var(--text); font-weight: 600; }
+  .about { max-width: 760px; margin: 0 auto; padding: 8px 24px 40px; color: var(--muted); font-size: 13px; text-align: center; }
+  .about b { color: var(--text); }
+  .linkbtn { background: none; height: auto; padding: 0; color: var(--accent-hi); font-weight: 600; }
+  .linkbtn:hover:not(:disabled) { background: none; text-decoration: underline; }
 
-  /* ---------- окно аккаунта ---------- */
+  /* ---------- account dialog ---------- */
   dialog { background: var(--surface); color: inherit; border: 1px solid var(--line); border-radius: var(--r); padding: 24px; width: min(92vw, 380px); }
   dialog::backdrop { background: #000a; backdrop-filter: blur(2px); }
   dialog h3 { margin: 0 0 6px; font: 700 16px var(--display); }
@@ -233,7 +228,7 @@
   dialog menu { display: flex; gap: 8px; padding: 0; margin: 16px 0 0; } dialog menu button { flex: 1; }
   dialog .wide { width: 100%; margin-top: 8px; }
 
-  /* ---------- адаптив ---------- */
+  /* ---------- responsive ---------- */
   @media (max-width: 1360px) {
     main { grid-template-columns: auto 380px; }
     .mygames { grid-column: 1 / -1; }
@@ -243,16 +238,16 @@
   }
   @media (max-width: 1100px) { .modes button { padding: 0 10px; } header { gap: 12px; padding: 0 16px; } }
   @media (max-width: 900px) {
-    main { grid-template-columns: minmax(0, 1fr); justify-items: center; } /* minmax(0,…): лента партий не распирает колонку */
+    main { grid-template-columns: minmax(0, 1fr); justify-items: center; } /* minmax(0,…): the games strip must not widen the column */
     main > * { min-width: 0; }
     .mygames, .side { width: min(100%, calc(var(--bs) + 32px)); }
     .side { max-height: none; } #moves { max-height: 300px; } #comment { order: -1; }
   }
   @media (max-width: 700px) {
-    /* телефон: доска во всю ширину, партии — лентой, навигация — снизу под большим пальцем */
+    /* phone: full-width board, games as a strip, navigation at the bottom under the thumb */
     :root { --bs: calc(100vw - 40px); --pbar: 32px; --gap: 12px; }
     body { font-size: 14px; }
-    header { position: static; height: auto; flex-wrap: wrap; gap: 8px; padding: 10px 12px; } /* три строки — не липнем */
+    header { position: static; height: auto; flex-wrap: wrap; gap: 8px; padding: 10px 12px; } /* three rows — not sticky */
     .brand { flex: 1; font-size: 16px; } .mark { width: 22px; height: 22px; }
     #acctbtn { height: 36px; padding: 0 12px; max-width: 50vw; }
     .modes { order: 2; flex-basis: 100%; } .modes button { flex: 1; }
@@ -279,49 +274,44 @@
   }
 </style>
 </head>
-<body data-mode="analysis" data-auth="out">
-<script>if (localStorage.authed) document.body.dataset.auth = 'in'; // до первой отрисовки: без мигания экрана входа (сервер всё равно проверит)</script>
-<div id="auth">
-  <form class="card">
+<body data-mode="analysis">
+<dialog id="authdlg">
+  <form>
     <div class="brand"><span class="mark"></span><span>Chess<b>Trainer</b></span></div>
-    <p class="tagline">Анализ партий, задачи и штурм</p>
-    <div class="tabs"><button type="button" data-t="login" class="on">Вход</button><button type="button" data-t="register">Регистрация</button></div>
-    <input name="username" placeholder="Логин" autocomplete="username" required>
-    <input name="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+    <p class="tagline">Sign in to keep your puzzle rating, rush record and linked account on every device.</p>
+    <div class="tabs"><button type="button" data-t="login" class="on">Sign in</button><button type="button" data-t="register">Create account</button></div>
+    <input name="username" placeholder="Username" autocomplete="username" required>
+    <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
     <div id="autherr"></div>
-    <button type="submit" id="authgo">Войти</button>
+    <button type="submit" id="authgo">Sign in</button>
+    <button type="button" id="guestgo" class="ghost">Continue as guest</button>
   </form>
-  <ul class="features">
-    <li><b>Анализ партий</b> с chess.com и lichess: Stockfish 17 оценивает каждый ход — от «Блестящего» до «Зевка», считает точность.</li>
-    <li><b>Задачи с рейтингом</b>: 24 000 позиций из реальных партий, от 400 до 2800. Решаете — рейтинг растёт, задачи усложняются.</li>
-    <li><b>Штурм</b>: 3 минуты и три ошибки — решите как можно больше задач.</li>
-  </ul>
-</div>
+</dialog>
 <header>
-  <a class="brand" href="/" title="На главную"><span class="mark"></span><span>Chess<b>Trainer</b></span></a>
-  <nav class="modes"><button data-mode="analysis" class="on">Анализ</button><button data-mode="puzzle">Задачи</button><button data-mode="rush">Штурм</button></nav>
+  <a class="brand" href="/" title="Home"><span class="mark"></span><span>Chess<b>Trainer</b></span></a>
+  <nav class="modes"><button data-mode="analysis" class="on">Analysis</button><button data-mode="puzzle">Puzzles</button><button data-mode="rush">Rush</button></nav>
   <div class="load">
-    <textarea id="input" rows="1" placeholder="PGN или ссылка на партию lichess" aria-label="PGN или ссылка на партию"></textarea>
-    <button id="go">Анализировать</button>
+    <textarea id="input" rows="1" placeholder="Paste a PGN or a lichess game link" aria-label="PGN or game link"></textarea>
+    <button id="go">Analyse</button>
   </div>
-  <button id="acctbtn" class="ghost">Аккаунт</button>
+  <button id="acctbtn" class="ghost">Sign in</button>
 </header>
 <div id="progress"><div></div></div>
 <div id="status"></div>
 <dialog id="acct">
   <form method="dialog">
-    <h3>Аккаунт <span id="whoami" class="hint"></span></h3>
-    <div class="hint" style="margin-bottom:8px">Ник chess.com или lichess для списка «Мои партии»</div>
+    <h3>Account <span id="whoami" class="hint"></span></h3>
+    <div class="hint" style="margin-bottom:8px">Your chess.com or lichess username for “My games”</div>
     <div class="sites">
       <label><input type="radio" name="site" value="chesscom" checked> chess.com</label>
       <label><input type="radio" name="site" value="lichess"> lichess</label>
     </div>
-    <input name="user" placeholder="Ник (пусто — отвязать)" pattern="[A-Za-z0-9_\-]{2,30}" autocomplete="off">
+    <input name="user" placeholder="Username (leave empty to unlink)" pattern="[A-Za-z0-9_\-]{2,30}" autocomplete="off">
     <menu>
-      <button value="save">Сохранить</button>
-      <button value="cancel" class="ghost" formnovalidate>Отмена</button>
+      <button value="save">Save</button>
+      <button value="cancel" class="ghost" formnovalidate>Cancel</button>
     </menu>
-    <button value="logout" class="ghost wide" formnovalidate>Выйти из аккаунта</button>
+    <button value="logout" class="ghost wide" formnovalidate>Sign out</button>
   </form>
 </dialog>
 <main>
@@ -336,30 +326,35 @@
   </section>
   <aside class="side">
     <div class="card" id="pz"></div>
-    <div class="card hint" id="summary">Выберите партию слева (кнопка «Аккаунт» — ваш ник chess.com или lichess) или вставьте PGN / ссылку lichess сверху.<br>Stockfish 17 проанализирует её прямо в браузере.</div>
+    <div class="card hint" id="summary">Pick one of your games, paste a PGN or lichess link above, or just play a move on the board.<br>Stockfish 17 runs right in your browser.</div>
     <div class="card" id="comment"></div>
     <div class="card" id="moves"></div>
     <div class="nav">
-      <button data-d="-999" title="В начало (Home)">⏮</button><button data-d="-1" title="Назад (←)">◀</button><button data-d="1" title="Вперёд (→)">▶</button><button data-d="999" title="В конец (End)">⏭</button><button id="flip" title="Перевернуть (F)">⇅</button><button id="mute" title="Звук (M)">🔊</button>
+      <button data-d="-999" title="Start (Home)">⏮</button><button data-d="-1" title="Back (←)">◀</button><button data-d="1" title="Forward (→)">▶</button><button data-d="999" title="End (End)">⏭</button><button id="flip" title="Flip board (F)">⇅</button><button id="mute" title="Sound (M)">🔊</button>
     </div>
   </aside>
 </main>
+<footer class="about">
+  <p><b>ChessTrainer</b> is a free chess trainer. Analyse your chess.com and lichess games with Stockfish 17 — every move
+    is graded from Brilliant to Blunder, with accuracy for both players. Solve rated puzzles from real games (400 to 2800)
+    that get harder as you improve, or race the clock in Puzzle Rush: three minutes, three strikes.</p>
+</footer>
 <script type="module">
 import { Chessground } from '/static/vendor/chessground.min.js';
 import { Chess } from '/static/vendor/chess.js';
 
 const svg = d => `<svg viewBox="0 0 24 24"><path d="${d}"/></svg>`;
 const CLS = {
-  brilliant: ['Блестящий', '!!', '#26c2a3'],
-  great: ['Замечательный', '!', '#749bbf'],
-  book: ['Теоретический', svg('M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z'), '#a88865'],
-  best: ['Лучший', '★', '#81b64c'],
-  excellent: ['Отличный', svg('M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z'), '#81b64c'],
-  good: ['Неплохой', '✓', '#95b776'],
-  inaccuracy: ['Неточность', '?!', '#f7c631'],
-  mistake: ['Ошибка', '?', '#ffa459'],
-  miss: ['Упущенный шанс', '✗', '#ff7769'],
-  blunder: ['Зевок', '??', '#fa412d'],
+  brilliant: ['Brilliant', '!!', '#26c2a3'],
+  great: ['Great', '!', '#749bbf'],
+  book: ['Book', svg('M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z'), '#a88865'],
+  best: ['Best', '★', '#81b64c'],
+  excellent: ['Excellent', svg('M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z'), '#81b64c'],
+  good: ['Good', '✓', '#95b776'],
+  inaccuracy: ['Inaccuracy', '?!', '#f7c631'],
+  mistake: ['Mistake', '?', '#ffa459'],
+  miss: ['Miss', '✗', '#ff7769'],
+  blunder: ['Blunder', '??', '#fa412d'],
 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -370,22 +365,21 @@ const progress = frac => $('progress').firstElementChild.style.width = frac * 10
 async function api(url, body) {
   const r = await fetch(url, body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
-  if (r.status === 401 && !url.startsWith('/api/auth')) showAuth(); // сессия кончилась — снова экран входа
-  if (!r.ok) throw new Error(j.error || `Ошибка сервера (${r.status})`);
+  if (!r.ok) throw new Error(j.error || `Server error (${r.status})`);
   return j;
 }
 
-// --- Stockfish (WASM, работает у пользователя, сервер не грузит)
-// Полный многопоточный движок (79 МБ, кэшируется) на компьютерах; облегчённый — на телефонах и слабых машинах.
+// --- Stockfish (WASM: runs on the user's machine, not the server)
+// Full multi-threaded engine (79 MB, cached) on computers; the lite one on phones and weak machines.
 const cores = navigator.hardwareConcurrency || 1;
 const MOBILE = navigator.userAgentData?.mobile || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
   || matchMedia('(pointer: coarse)').matches;
 const FULL = self.crossOriginIsolated && cores >= 4 && !MOBILE;
 const ENGINE = FULL
-  // 2 потока: ПК остаётся свободным. Больше потоков/времени — сильнее анализ, но выше нагрузка.
+  // 2 threads keep the computer free. More threads/time = stronger analysis but more load.
   ? { file: 'stockfish-17.1-8e4d048.js', go: 'go depth 22 movetime 500', threads: 2, hash: 64, name: 'Stockfish 17.1' }
   : { file: 'stockfish-17.1-lite-single-03e3232.js', go: 'go depth 14 movetime 400', threads: 1, hash: 32, name: 'Stockfish 17.1 lite' };
-// go: сила анализа. Меняешь — проверь точность против chess.com (константы ACC_* в analysis.py)
+// go: analysis strength. If you change it, re-check accuracy against chess.com (ACC_* constants in analysis.py)
 const sf = new Worker('/static/engine/' + ENGINE.file);
 let onLine = () => {};
 sf.onmessage = e => onLine(e.data);
@@ -406,14 +400,14 @@ function evalFen(fen) {
   return done;
 }
 
-const evalCache = new Map(); // fen -> оценка; ходы на доске из позиций партии не пересчитываются
-let engineChain = Promise.resolve(); // движок один — запросы строго по очереди
+const evalCache = new Map(); // fen -> eval; board moves from game positions reuse it
+let engineChain = Promise.resolve(); // one engine: requests strictly in order
 
 async function evalWhite(fen) {
   if (evalCache.has(fen)) return evalCache.get(fen);
-  await ready; // ход до загрузки движка не должен перехватить его 'readyok'
+  await ready; // a move before the engine loads must not swallow its 'readyok'
   const [a, b] = await evalFen(fen);
-  const s = fen.split(' ')[1] === 'w' ? 1 : -1; // движок даёт оценку за ходящего, храним за белых
+  const s = fen.split(' ')[1] === 'w' ? 1 : -1; // the engine scores for the side to move; we store White's view
   const pov = x => x && ('cp' in x ? { cp: x.cp * s } : { mate: x.mate * s });
   const ev = a ? { best: a.move, ...pov(a), second: pov(b) || null } : null;
   evalCache.set(fen, ev);
@@ -427,20 +421,20 @@ async function analyse(fens) {
   evalCache.clear();
   const evals = [];
   for (const [i, fen] of fens.entries()) {
-    status(`${ENGINE.name} (${ENGINE.threads} пот.): позиция ${i + 1} из ${fens.length}`);
+    status(`${ENGINE.name} · ${ENGINE.threads} thread${ENGINE.threads > 1 ? 's' : ''} · position ${i + 1} of ${fens.length}`);
     progress(i / fens.length);
     evals.push(await evalWhite(fen));
   }
   return evals;
 }
 
-// --- Доска
-// Пустая «партия» из начальной позиции: на главной можно сразу ходить, движок оценивает ходы
+// --- Board
+// Blank "game" from the start position: you can play moves on the home page right away
 const blankGame = () => ({ moves: [], start_fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
   scores: [{ cp: 0, wp: 0.5 }], headers: {}, opening: '', stats: {} });
 let R = blankGame(), ply = 0, flipped = false, analysing = false;
-let VAR = null; // свой вариант: { base: ply партии, nodes: [{fen, uci, san, cls, best_*, score}], idx: сколько ходов показано }
-// Рисование как на chess.com: ПКМ+тянуть — стрелка, ПКМ по клетке — красная клетка, ЛКМ — стереть всё.
+let VAR = null; // own variation: { base: game ply, nodes: [{fen, uci, san, cls, best_*, score}], idx: moves shown }
+// Drawing like chess.com: right-drag = arrow, right-click = red square, left-click = clear all.
 const markSquares = shapes => cg.set({ highlight: { custom: new Map(shapes.filter(sh => !sh.dest).map(sh => [sh.orig, 'marked'])) } });
 const cg = Chessground($('board'), {
   animation: { duration: 250 },
@@ -449,8 +443,8 @@ const cg = Chessground($('board'), {
   drawable: {
     enabled: true, eraseOnClick: true, onChange: markSquares,
     brushes: {
-      green: { key: 'g', color: '#ffaa00', opacity: 0.85, lineWidth: 15 }, // стрелка пользователя (оранжевая)
-      best: { key: 'b', color: '#15781b', opacity: 0.8, lineWidth: 15 },  // лучший ход движка
+      green: { key: 'g', color: '#ffaa00', opacity: 0.85, lineWidth: 15 }, // user arrow (orange)
+      best: { key: 'b', color: '#15781b', opacity: 0.8, lineWidth: 15 },  // engine best move
     },
   },
 });
@@ -458,15 +452,15 @@ new ResizeObserver(() => cg.redrawAll()).observe($('wrap'));
 const evalText = (sc, m) => m?.san.endsWith('#') ? (sc.wp > .5 ? '1-0' : '0-1')
   : 'mate' in sc ? 'M' + Math.abs(sc.mate) : (Math.abs(sc.cp) / 100).toFixed(1);
 
-// --- Звуки
-// Громкость файлов разная: замерено (макс. RMS за 50 мс, дБ) и выровнено под звук хода
+// --- Sounds
+// Files differ in loudness: measured (max 50 ms RMS, dB) and levelled to the move sound
 const LOUDNESS = {
   'move-self': -26.5, 'move-opponent': -30.2, 'move-check': -25.8, capture: -25.3, castle: -26.1, promote: -26.1,
   'game-end': -22.0, 'game-start': -21.6, 'brilliant-move': -15.2, 'puzzle-correct': -6.1, 'puzzle-wrong': -3.0,
 };
 const SND = Object.fromEntries(Object.entries(LOUDNESS).map(([n, db]) => {
   const a = new Audio(`/static/sounds/${n}.mp3`);
-  a.volume = Math.min(1, 10 ** ((LOUDNESS['move-self'] - db) / 20)); // только тише: громче 1.0 браузер не умеет
+  a.volume = Math.min(1, 10 ** ((LOUDNESS['move-self'] - db) / 20)); // only quieter: browsers cannot go above 1.0
   return [n, a];
 }));
 let muted = localStorage.muted === '1';
@@ -474,10 +468,10 @@ const play = name => {
   if (muted) return;
   const a = SND[name];
   a.currentTime = 0;
-  a.play().catch(() => {}); // браузер блокирует звук до первого клика — не страшно
+  a.play().catch(() => {}); // browsers block audio until the first click — harmless
 };
 function moveSound({ san, fen }) {
-  const who = (fen.split(' ')[1] === 'b') !== flipped ? 'self' : 'opponent'; // «свой» ход — за сторону снизу доски
+  const who = (fen.split(' ')[1] === 'b') !== flipped ? 'self' : 'opponent'; // "own" move = the side at the bottom of the board
   return san.includes('#') ? 'game-end' : san.includes('+') ? 'move-check' : san.includes('=') ? 'promote'
     : san.startsWith('O-O') ? 'castle' : san.includes('x') ? 'capture' : `move-${who}`;
 }
@@ -487,7 +481,7 @@ function setMuted(v) {
   $('mute').textContent = v ? '🔇' : '🔊';
 }
 
-// Легальные ходы для доски (chess.js); ходить можно после анализа партии
+// Legal moves for the board (chess.js); moving is allowed once the game is analysed
 function movable(fen) {
   if (!R || analysing) return { color: undefined, dests: new Map() };
   const dests = new Map();
@@ -495,14 +489,14 @@ function movable(fen) {
   return { color: fen.split(' ')[1] === 'w' ? 'white' : 'black', dests };
 }
 
-// Рисует позицию: доска, значок хода, стрелка лучшего, шкала. m — показанный ход (или null), sc — оценка (или null: считается)
+// Draws a position: board, move badge, best-move arrow, eval bar. m = shown move (or null), sc = score (or null while thinking)
 function paint(fen, m, sc) {
   cg.set({
     fen, lastMove: m && [m.uci.slice(0, 2), m.uci.slice(2, 4)],
     turnColor: fen.split(' ')[1] === 'w' ? 'white' : 'black', check: !!m && /[+#]$/.test(m.san),
     highlight: { custom: new Map() }, movable: movable(fen),
   });
-  cg.setShapes([]); // нарисованное относится к позиции — при смене хода стираем, как chess.com
+  cg.setShapes([]); // drawings belong to a position: clear them on move change, like chess.com
   cg.setAutoShapes(m?.best_uci ? [{ orig: m.best_uci.slice(0, 2), dest: m.best_uci.slice(2, 4), brush: 'best' }] : []);
 
   const wrap = $('wrap');
@@ -529,14 +523,14 @@ function paint(fen, m, sc) {
   }
 }
 
-// Заголовок комментария: значок, ход, категория, оценка, лучший ход
+// Comment header: badge, move, class, eval, best move
 function moveInfo(m, sc, no) {
-  if (!m.cls) return `<div class="head"><b>${no}${m.san}</b>&nbsp;—&nbsp;<span class="hint">считаю…</span></div>`;
+  if (!m.cls) return `<div class="head"><b>${no}${m.san}</b>&nbsp;—&nbsp;<span class="hint">thinking…</span></div>`;
   const [name, , color] = CLS[m.cls];
   const sign = m.san.endsWith('#') ? '' : sc.wp >= .5 ? '+' : '−';
   return `<div class="head">${icon(m.cls)}<b>${no}${m.san}</b>&nbsp;—&nbsp;<span style="color:${color}">${name}</span>` +
     `<span class="ev">${sign}${evalText(sc, m)}</span></div>` +
-    (m.best_san ? `<div class="best">Лучший ход: <b>${m.best_san}</b></div>` : '') +
+    (m.best_san ? `<div class="best">Best was <b>${m.best_san}</b></div>` : '') +
     (m.cls === 'book' && (m.opening || R.opening) ? `<div class="best">${esc(m.opening || R.opening)}</div>` : '');
 }
 const moveNo = p => Math.ceil(p / 2) + (p % 2 ? '. ' : '… ');
@@ -552,17 +546,17 @@ function go(n) {
   paint(m ? m.fen : R.start_fen, m, R.scores[ply]);
   document.querySelectorAll('.mv.cur').forEach(e => e.classList.remove('cur'));
   if (!m) {
-    $('comment').innerHTML = `<span class="hint">${R.moves.length ? 'Начальная позиция — листайте ← → или сделайте свой ход на доске'
-      : 'Сделайте ход на доске — движок сразу его оценит. Или загрузите партию.'}</span>`;
+    $('comment').innerHTML = `<span class="hint">${R.moves.length ? 'Starting position — use ← → or play your own move on the board'
+      : 'Play a move on the board and the engine grades it instantly. Or load a game.'}</span>`;
     return;
   }
   $('comment').innerHTML = moveInfo(m, R.scores[ply], moveNo(ply));
   const cur = document.querySelector(`.mv[data-i="${ply}"]`);
   cur.classList.add('cur');
-  $('moves').scrollTop = cur.offsetTop - $('moves').clientHeight / 2; // не scrollIntoView: тот прокручивает всю страницу
+  $('moves').scrollTop = cur.offsetTop - $('moves').clientHeight / 2; // not scrollIntoView: that scrolls the whole page
 }
 
-// --- Свой вариант: ход мышкой из любой позиции, движок сразу оценивает его
+// --- Own variation: play a move from any position, the engine grades it right away
 function showVar() {
   const k = VAR.idx, m = VAR.nodes[k - 1];
   const fen = m ? m.fen : (VAR.base ? R.moves[VAR.base - 1].fen : R.start_fen);
@@ -572,18 +566,18 @@ function showVar() {
     return (p % 2 || i === 0 ? `<span class="no">${moveNo(p).trim()}</span>` : '') +
       `<span class="vmv${i === k - 1 ? ' cur' : ''}" data-v="${i + 1}">${n.cls ? icon(n.cls) : ''}${n.san}</span>`;
   }).join(' ');
-  $('comment').innerHTML = (m ? moveInfo(m, m.score, moveNo(VAR.base + k)) : '<span class="hint">Начало варианта</span>') +
-    `<div class="var"><button id="tomain" class="ghost">${R.moves.length ? '↩ К партии' : '↺ Сначала'}</button><span>Вариант: ${line}</span></div>`;
+  $('comment').innerHTML = (m ? moveInfo(m, m.score, moveNo(VAR.base + k)) : '<span class="hint">Start of variation</span>') +
+    `<div class="var"><button id="tomain" class="ghost">${R.moves.length ? '↩ Back to game' : '↺ Reset'}</button><span>Variation: ${line}</span></div>`;
 }
 
 async function userMove(orig, dest) {
   const fenBefore = VAR ? (VAR.idx ? VAR.nodes[VAR.idx - 1].fen : (VAR.base ? R.moves[VAR.base - 1].fen : R.start_fen))
     : (ply ? R.moves[ply - 1].fen : R.start_fen);
   const game = new Chess(fenBefore);
-  const mv = game.move({ from: orig, to: dest, promotion: 'q' }); // ponytail: превращение всегда в ферзя
+  const mv = game.move({ from: orig, to: dest, promotion: 'q' }); // ponytail: always promotes to a queen
   if (!VAR) VAR = { base: ply, nodes: [], idx: 0 };
   const prevNode = VAR.idx ? VAR.nodes[VAR.idx - 1] : R.moves[VAR.base - 1];
-  VAR.nodes = VAR.nodes.slice(0, VAR.idx); // новый ход отрезает старое продолжение варианта
+  VAR.nodes = VAR.nodes.slice(0, VAR.idx); // a new move cuts off the old continuation
   const node = { fen: game.fen(), uci: mv.lan, san: mv.san, score: null };
   VAR.nodes.push(node);
   VAR.idx++;
@@ -596,11 +590,11 @@ async function userMove(orig, dest) {
     status(e.message, true);
     return;
   }
-  if (VAR?.nodes[VAR.idx - 1] === node) showVar(); // пользователь мог уже уйти на другой ход
+  if (VAR?.nodes[VAR.idx - 1] === node) showVar(); // the user may have moved elsewhere meanwhile
   if (node.cls === 'brilliant') play('brilliant-move');
 }
 
-// ← → внутри варианта; ← из начала варианта и любые прыжки — обратно в партию
+// ← → inside the variation; ← from its start and any jump go back to the game
 function step(d) {
   if (VAR && d === 1 && VAR.idx < VAR.nodes.length) { VAR.idx++; sfx(VAR.nodes[VAR.idx - 1]); return showVar(); }
   if (VAR && d === -1 && VAR.idx > 0) { VAR.idx--; return showVar(); }
@@ -614,7 +608,7 @@ function flip(v = !flipped) {
   cg.set({ orientation: v ? 'black' : 'white' });
   $('evalbar').classList.toggle('flip', v);
   const h = R?.headers || {};
-  const bar = (c, name, elo) => `<i style="background:${c === 'w' ? '#f0f0f0' : '#111'}"></i>${esc(name && name !== '?' ? name : c === 'w' ? 'Белые' : 'Чёрные')} <span class="elo">${elo ? `(${esc(elo)})` : ''}</span>`;
+  const bar = (c, name, elo) => `<i style="background:${c === 'w' ? '#f0f0f0' : '#111'}"></i>${esc(name && name !== '?' ? name : c === 'w' ? 'White' : 'Black')} <span class="elo">${elo ? `(${esc(elo)})` : ''}</span>`;
   const [top, bot] = [bar('b', h.Black, h.BlackElo), bar('w', h.White, h.WhiteElo)];
   $('ptop').innerHTML = v ? bot : top;
   $('pbot').innerHTML = v ? top : bot;
@@ -625,11 +619,11 @@ function render() {
   const h = R.headers, st = R.stats;
   const count = (c, k) => {
     const n = st[c]?.counts[k] || 0;
-    return n ? `<td class="jump" data-c="${c}" data-k="${k}" title="К первому такому ходу">${n}</td>` : '<td>0</td>';
+    return n ? `<td class="jump" data-c="${c}" data-k="${k}" title="Jump to the first such move">${n}</td>` : '<td>0</td>';
   };
-  const player = (c, name) => `<div><div class="name">${esc(name && name !== '?' ? name : c === 'w' ? 'Белые' : 'Чёрные')}</div><div class="acc ${c}">${st[c]?.accuracy ?? '—'}</div></div>`;
+  const player = (c, name) => `<div><div class="name">${esc(name && name !== '?' ? name : c === 'w' ? 'White' : 'Black')}</div><div class="acc ${c}">${st[c]?.accuracy ?? '—'}</div></div>`;
   $('summary').className = 'card';
-  $('summary').innerHTML = `<div class="players">${player('w', h.White)}<div class="lbl">Точность</div>${player('b', h.Black)}</div>
+  $('summary').innerHTML = `<div class="players">${player('w', h.White)}<div class="lbl">Accuracy</div>${player('b', h.Black)}</div>
     <div class="opening">${esc(R.opening)}</div>
     <table>${Object.keys(CLS).map(k => `<tr>${count('w', k)}<td>${icon(k)}${CLS[k][0]}</td>${count('b', k)}</tr>`).join('')}</table>`;
   $('moves').innerHTML = R.moves.map((m, i) => (i % 2 ? '' : `<span class="no">${i / 2 + 1}.</span>`) +
@@ -639,11 +633,11 @@ function render() {
 async function run(input, asBlack = false) {
   document.querySelectorAll('.load button').forEach(b => b.disabled = true);
   try {
-    status('Загрузка партии…');
+    status('Loading game…');
     const g = await api('/api/game', { input });
     analysing = true;
     VAR = null;
-    cg.set({ movable: { color: undefined, dests: new Map() } }); // пока идёт анализ — ходить нельзя
+    cg.set({ movable: { color: undefined, dests: new Map() } }); // no moves while the game is being analysed
     const evals = await queued(() => analyse(g.fens));
     analysing = false;
     R = await api('/api/report', { pgn: g.pgn, evals });
@@ -664,8 +658,8 @@ async function run(input, asBlack = false) {
 }
 
 $('go').onclick = () => run($('input').value);
-// --- Аккаунт: ник хранится в браузере, слева последние 5 партий
-let account = null; // привязанный ник { site, user } — хранится в аккаунте на сервере
+// --- My games: latest games of the linked chess.com / lichess username
+let account = null; // linked username { site, user }, stored on the server
 const SITE = { chesscom: 'chess.com', lichess: 'lichess' };
 
 let gamesPage = 0;
@@ -674,11 +668,13 @@ async function loadMyGames(page = gamesPage) {
   gamesPage = page;
   const box = $('mygames');
   if (!account) {
-    box.innerHTML = '<div class="hint">Нажмите «Аккаунт» и укажите ник chess.com или lichess — здесь будут ваши последние партии.</div>';
+    box.innerHTML = '<div class="top">My games</div><div class="hint">Link your chess.com or lichess username to see your latest games here.</div>' +
+      '<div class="pager" style="grid-template-columns:1fr"><button id="linkgo" class="ghost">Link account</button></div>';
+    box.onclick = e => { if (e.target.id === 'linkgo') openLink(); };
     return;
   }
-  const top = `<div class="top">Мои партии <small>${esc(SITE[account.site])}</small><button id="reload" title="Обновить">↻</button></div>`;
-  box.innerHTML = top + '<div class="hint">Загрузка…</div>';
+  const top = `<div class="top">My games <small>${esc(SITE[account.site])}</small><button id="reload" title="Refresh">↻</button></div>`;
+  box.innerHTML = top + '<div class="hint">Loading…</div>';
   let list, more;
   try {
     ({ games: list, more } = await api(`/api/games/${account.site}/${encodeURIComponent(account.user)}?page=${page}`));
@@ -694,12 +690,12 @@ async function loadMyGames(page = gamesPage) {
     return { ...g, black, res, opp, elo };
   });
   box.innerHTML = top + (games.length ? `<ul>${games.map((g, i) => `<li data-i="${i}">
-      <span class="res ${g.res}">${{ w: 'В', l: 'П', d: 'Н' }[g.res]}</span>
+      <span class="res ${g.res}">${{ w: 'W', l: 'L', d: 'D' }[g.res]}</span>
       <div><b>${g.black ? '♚' : '♔'} ${esc(g.opp)} ${g.elo ? `(${g.elo})` : ''}</b>
-      <small>${esc(g.speed || '')} · ${new Date(g.end * 1000).toLocaleDateString('ru')}</small></div></li>`).join('')}</ul>`
-    : '<div class="hint">Партий не найдено</div>') +
-    `<div class="pager"><button data-p="-1" ${page ? '' : 'disabled'}>‹ Новее</button><span>стр. ${page + 1}</span>` +
-    `<button data-p="1" ${more ? '' : 'disabled'}>Старее ›</button></div>`;
+      <small>${esc(g.speed || '')} · ${new Date(g.end * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</small></div></li>`).join('')}</ul>`
+    : '<div class="hint">No games found</div>') +
+    `<div class="pager"><button data-p="-1" ${page ? '' : 'disabled'}>‹ Newer</button><span>page ${page + 1}</span>` +
+    `<button data-p="1" ${more ? '' : 'disabled'}>Older ›</button></div>`;
   box.onclick = e => {
     if (e.target.id === 'reload') return loadMyGames(0);
     const p = e.target.closest('.pager button');
@@ -713,43 +709,42 @@ async function loadMyGames(page = gamesPage) {
   };
 }
 
-$('acctbtn').onclick = () => {
+function openLink() { // link a chess.com / lichess username (guests too)
   const f = $('acct').querySelector('form');
   f.site.value = account?.site || 'chesscom';
   f.user.value = account?.user || '';
   $('acct').showModal();
-};
+}
+$('acctbtn').onclick = () => ME?.username ? openLink() : $('authdlg').showModal();
 $('acct').onclose = async () => {
   const f = $('acct').querySelector('form'), v = $('acct').returnValue;
-  if (v === 'logout') { await api('/api/auth/logout', {}); delete localStorage.authed; return location.assign('/'); }
+  if (v === 'logout') { await api('/api/auth/logout', {}); return location.assign('/'); }
   if (v !== 'save') return;
   try { applyMe(await api('/api/me', { site: f.site.value, nick: f.user.value.trim() })); } catch (e) { return status(e.message, true); }
   loadMyGames(0);
 };
 
-// --- Вход: без аккаунта сайт не работает; рейтинг задач, рекорд штурма и ник хранятся на сервере
+// --- Accounts are optional: guests keep progress in their session; signing up carries it over
 let ME = null, authMode = 'login';
-function showAuth() {
-  delete localStorage.authed;
-  document.body.dataset.auth = 'out';
-  $('auth').querySelector('[name=username]').focus();
-}
 function applyMe(me) {
   ME = me;
-  localStorage.authed = '1';
   account = me.nick ? { site: me.site, user: me.nick } : null;
-  $('acctbtn').textContent = '👤 ' + me.username;
-  $('whoami').textContent = me.username;
+  PR.rating = me.puzzle_rating;
+  PR.games = me.puzzle_games;
+  $('acctbtn').textContent = me.username ? '👤 ' + me.username : 'Sign in';
+  $('whoami').textContent = me.username || 'guest';
+  $('acct').querySelector('[value=logout]').hidden = !me.username;
 }
-$('auth').querySelector('.tabs').onclick = e => {
+$('authdlg').querySelector('.tabs').onclick = e => {
   const t = e.target.closest('button');
   if (!t) return;
   authMode = t.dataset.t;
-  $('auth').querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b === t));
-  $('authgo').textContent = authMode === 'login' ? 'Войти' : 'Создать аккаунт';
-  $('auth').querySelector('[name=password]').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+  $('authdlg').querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b === t));
+  $('authgo').textContent = authMode === 'login' ? 'Sign in' : 'Create account';
+  $('authdlg').querySelector('[name=password]').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
 };
-$('auth').querySelector('form').onsubmit = async e => {
+$('guestgo').onclick = () => $('authdlg').close();
+$('authdlg').querySelector('form').onsubmit = async e => {
   e.preventDefault();
   const f = e.target;
   $('autherr').textContent = '';
@@ -757,32 +752,27 @@ $('auth').querySelector('form').onsubmit = async e => {
     applyMe(await api('/api/auth/' + authMode, { username: f.username.value.trim(), password: f.password.value }));
   } catch (err) { $('autherr').textContent = err.message; return; }
   f.password.value = '';
-  start();
-};
-function start() { // после входа
-  document.body.dataset.auth = 'in';
-  PR.rating = ME.puzzle_rating;
-  PR.games = ME.puzzle_games;
+  $('authdlg').close();
   loadMyGames(0);
-  cg.redrawAll();
-  if (location.hash.length > 1) run(decodeURIComponent(location.hash.slice(1))); // /#https://lichess.org/xxxx
-}
-
-// ===================== Задачи и штурм (база задач lichess, CC0) =====================
-let MODE = 'analysis';
-let PZ = null; // текущая задача: { data, game, sol: [uci], step, color, failed, done }
-const PR = { rating: 1200, games: 0 }; // рейтинг задач (с сервера)
-const THEMES = {
-  mate: 'Мат', mateIn1: 'Мат в 1', mateIn2: 'Мат в 2', mateIn3: 'Мат в 3', mateIn4: 'Мат в 4', fork: 'Вилка', pin: 'Связка',
-  skewer: 'Сквозной удар', hangingPiece: 'Висящая фигура', sacrifice: 'Жертва', discoveredAttack: 'Вскрытое нападение',
-  doubleCheck: 'Двойной шах', deflection: 'Отвлечение', attraction: 'Завлечение', backRankMate: 'Мат по последней горизонтали',
-  promotion: 'Превращение', trappedPiece: 'Пойманная фигура', clearance: 'Освобождение поля', interference: 'Перекрытие',
-  intermezzo: 'Промежуточный ход', quietMove: 'Тихий ход', zugzwang: 'Цугцванг', advantage: 'Выигрыш материала',
-  crushing: 'Решающее преимущество', endgame: 'Эндшпиль', middlegame: 'Миттельшпиль', opening: 'Дебют',
-  smotheredMate: 'Спёртый мат', exposedKing: 'Открытый король', kingsideAttack: 'Атака на короля', defensiveMove: 'Защита',
+  if (MODE === 'puzzle' && PZ) pzRender();
+  if (MODE === 'rush') rushRender();
 };
 
-async function fetchPuzzle(rating, short) { // без rating — под рейтинг игрока; уже сыгранные сервер не выдаёт
+// ===================== Puzzles and rush (lichess puzzle database, CC0) =====================
+let MODE = 'analysis';
+let PZ = null; // current puzzle: { data, game, sol: [uci], step, color, failed, done }
+const PR = { rating: 1200, games: 0 }; // puzzle rating (from the server)
+const THEMES = {
+  mate: 'Mate', mateIn1: 'Mate in 1', mateIn2: 'Mate in 2', mateIn3: 'Mate in 3', mateIn4: 'Mate in 4', fork: 'Fork', pin: 'Pin',
+  skewer: 'Skewer', hangingPiece: 'Hanging piece', sacrifice: 'Sacrifice', discoveredAttack: 'Discovered attack',
+  doubleCheck: 'Double check', deflection: 'Deflection', attraction: 'Attraction', backRankMate: 'Back-rank mate',
+  promotion: 'Promotion', trappedPiece: 'Trapped piece', clearance: 'Clearance', interference: 'Interference',
+  intermezzo: 'Intermezzo', quietMove: 'Quiet move', zugzwang: 'Zugzwang', advantage: 'Advantage',
+  crushing: 'Crushing', endgame: 'Endgame', middlegame: 'Middlegame', opening: 'Opening',
+  smotheredMate: 'Smothered mate', exposedKing: 'Exposed king', kingsideAttack: 'Kingside attack', defensiveMove: 'Defensive move',
+};
+
+async function fetchPuzzle(rating, short) { // without rating: near the player's rating; the server skips played ones
   return api(rating === undefined ? '/api/puzzle' : `/api/puzzle?rating=${Math.round(rating)}${short ? '&short=1' : ''}`);
 }
 
@@ -796,7 +786,7 @@ function pzShow(lastMove) {
   cg.set({ fen: PZ.game.fen(), lastMove, turnColor: PZ.game.turn() === 'w' ? 'white' : 'black', check: PZ.game.inCheck(),
     movable: pzMovable(), highlight: { custom: new Map() } });
 }
-function pzPlay(uci) { // ход соперника (или показ решения)
+function pzPlay(uci) { // opponent move (or showing the solution)
   const mv = PZ.game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
   PZ.step++;
   PZ.last = [mv.from, mv.to];
@@ -814,16 +804,16 @@ function startPuzzle(data) {
   cg.set({ orientation: PZ.color });
   pzShow(undefined);
   const mine = PZ;
-  setTimeout(() => { if (PZ === mine) { pzPlay(PZ.sol[0]); pzRender(); } }, 500); // первый ход — соперника
+  setTimeout(() => { if (PZ === mine) { pzPlay(PZ.sol[0]); pzRender(); } }, 500); // the first move is the opponent's
   pzRender();
 }
 
 function puzzleMove(orig, dest) {
   const want = PZ.sol[PZ.step];
   const mv = PZ.game.move({ from: orig, to: dest, promotion: want?.startsWith(orig + dest) ? want[4] || 'q' : 'q' });
-  if (mv.lan !== want && !PZ.game.isCheckmate()) { // любой матующий ход тоже засчитывается (как на lichess)
+  if (mv.lan !== want && !PZ.game.isCheckmate()) { // any mating move counts too (like lichess)
     PZ.game.undo();
-    pzShow(PZ.last); // откатываем неверный ход
+    pzShow(PZ.last); // undo the wrong move
     play('puzzle-wrong');
     return MODE === 'rush' ? rushResult(false) : pzFail();
   }
@@ -840,7 +830,7 @@ function puzzleMove(orig, dest) {
   setTimeout(() => { if (PZ === mine) pzPlay(PZ.sol[PZ.step]); }, 300);
 }
 
-// --- рейтинговые задачи: Эло против рейтинга задачи считает сервер, засчитывается только первая попытка
+// --- rated puzzles: the server computes Elo vs the puzzle's rating; only the first attempt counts
 async function rate(p, win) {
   try {
     const r = await api('/api/puzzle/result', { id: p.data.id, win });
@@ -855,30 +845,31 @@ async function pzFail() {
   pzRender();
   if (!PZ.failed) { PZ.failed = true; await rate(PZ, false); }
 }
-async function nextPuzzle() { $('pz').innerHTML = '<span class="hint">Загрузка задачи…</span>'; startPuzzle(await fetchPuzzle()); }
+async function nextPuzzle() { $('pz').innerHTML = '<span class="hint">Loading puzzle…</span>'; startPuzzle(await fetchPuzzle()); }
 
 function pzRender() {
   if (MODE === 'rush') return rushRender();
   const d = PZ.delta, sign = d > 0 ? '+' : '';
   const tags = PZ.data.themes.split(' ').map(t => THEMES[t]).filter(Boolean).join(' · ');
-  const side = PZ.color === 'white' ? 'белых' : 'чёрных';
-  const msg = PZ.result === 'ok' ? `<div class="msg ok">✓ Решено!</div>`
-    : PZ.result === 'bad' ? `<div class="msg bad">✗ Неверно. Попробуйте ещё или посмотрите решение.</div>`
-    : `<div class="msg">Ход ${side}: найдите лучший ход</div>`;
-  $('pz').innerHTML = `<h3>Задачи</h3>
-    <div class="stat"><span>Ваш рейтинг</span><span><span class="big">${PR.rating}</span>
+  const side = PZ.color === 'white' ? 'White' : 'Black';
+  const msg = PZ.result === 'ok' ? `<div class="msg ok">✓ Solved!</div>`
+    : PZ.result === 'bad' ? `<div class="msg bad">✗ Not the move. Try again or view the solution.</div>`
+    : `<div class="msg">${side} to move — find the best move</div>`;
+  $('pz').innerHTML = `<h3>Puzzles</h3>
+    <div class="stat"><span>Your rating</span><span><span class="big">${PR.rating}</span>
       ${d !== undefined ? `<span class="delta ${d >= 0 ? 'up' : 'down'}">${sign}${d}</span>` : ''}</span></div>
     ${msg}
-    ${PZ.result ? `<div class="tags">Рейтинг задачи: ${PZ.data.rating}${tags ? ' · ' + tags : ''}</div>` : ''}
-    <div class="row">${PZ.done ? '' : '<button id="pzhint" class="ghost">Подсказка</button><button id="pzsol" class="ghost">Решение</button>'}
-      <button id="pznext">${PZ.done ? 'Следующая →' : 'Пропустить'}</button></div>
-    <div class="tags">Сыграно задач: ${PR.games}. Подсказка, решение или пропуск засчитываются как неудача.</div>`;
+    ${PZ.result ? `<div class="tags">Puzzle rating: ${PZ.data.rating}${tags ? ' · ' + tags : ''}</div>` : ''}
+    <div class="row">${PZ.done ? '' : '<button id="pzhint" class="ghost">Hint</button><button id="pzsol" class="ghost">Solution</button>'}
+      <button id="pznext">${PZ.done ? 'Next puzzle →' : 'Skip'}</button></div>
+    <div class="tags">Puzzles played: ${PR.games}. A hint, the solution or a skip counts as a fail.</div>
+    ${ME?.username ? '' : '<div class="tags">Playing as a guest — <button class="linkbtn" id="pzsignin">sign in</button> to keep your rating on every device.</div>'}`;
 }
 
 $('pz').onclick = async e => {
   const id = e.target.id;
   if (id === 'pznext') {
-    if (MODE === 'puzzle' && PZ && !PZ.done && !PZ.failed && PZ.step > 0) await pzFail(); // пропуск = неудача (до новой задачи)
+    if (MODE === 'puzzle' && PZ && !PZ.done && !PZ.failed && PZ.step > 0) await pzFail(); // skip = fail (before fetching the next puzzle)
     return MODE === 'rush' ? null : nextPuzzle();
   }
   if (id === 'pzhint' && PZ.step % 2 === 1) {
@@ -896,12 +887,13 @@ $('pz').onclick = async e => {
     })();
   }
   if (id === 'rushgo') rushStart();
+  if (id === 'pzsignin') $('authdlg').showModal();
 };
 
-// --- штурм: 3 минуты, 3 ошибки — конец; задачи короткие и с каждой становятся сложнее (как Puzzle Rush на chess.com)
+// --- rush: 3 minutes, 3 strikes; short puzzles that get harder each time (like chess.com Puzzle Rush)
 const RUSH_TIME = 180_000;
 let RUSH = null;
-const rushRating = n => 400 + n * 50; // 1-я задача ~400, 20-я ~1400, 40-я ~2400
+const rushRating = n => 400 + n * 50; // puzzle 1 ~400, 20 ~1400, 40 ~2400
 
 async function rushStart() {
   RUSH = { score: 0, strikes: 0, n: 0, trail: [], end: Date.now() + RUSH_TIME, over: false };
@@ -912,7 +904,7 @@ async function rushStart() {
 async function rushNext() {
   const data = await RUSH.next;
   RUSH.n++;
-  RUSH.next = fetchPuzzle(rushRating(RUSH.n), true); // следующую грузим заранее
+  RUSH.next = fetchPuzzle(rushRating(RUSH.n), true); // prefetch the next one
   if (!RUSH.over) startPuzzle(data);
 }
 function rushResult(ok) {
@@ -938,25 +930,25 @@ function rushOver() {
 }
 function rushRender() {
   if (!RUSH) {
-    $('pz').innerHTML = `<h3>Штурм</h3>
-      <div>3 минуты — решите как можно больше задач. Задачи становятся сложнее с каждой решённой.
-      Три ошибки — и штурм окончен.</div>
-      <div class="stat"><span>Рекорд</span><span class="big">${ME.rush_best}</span></div>
-      <div class="row"><button id="rushgo">Начать</button></div>`;
+    $('pz').innerHTML = `<h3>Puzzle Rush</h3>
+      <div>Solve as many puzzles as you can in 3 minutes. Each one is harder than the last.
+      Three wrong moves and the run is over.</div>
+      <div class="stat"><span>Best score</span><span class="big">${ME.rush_best}</span></div>
+      <div class="row"><button id="rushgo">Start</button></div>`;
     return;
   }
   const left = Math.max(0, RUSH.end - Date.now()), sec = Math.ceil(left / 1000);
   const trail = `<div class="trail">${RUSH.trail.map(ok => `<i class="${ok ? 'ok' : 'bad'}">${ok ? '✓' : '✗'}</i>`).join('')}</div>`;
   if (RUSH.over) {
-    $('pz').innerHTML = `<h3>Штурм окончен</h3>
-      <div class="stat"><span>Решено</span><span class="big">${RUSH.score}</span></div>
-      <div class="msg ${RUSH.record ? 'ok' : ''}">${RUSH.record ? '🏆 Новый рекорд!' : `Рекорд: ${RUSH.best}`}</div>
-      ${trail}<div class="row"><button id="rushgo">Ещё раз</button></div>`;
+    $('pz').innerHTML = `<h3>Run over</h3>
+      <div class="stat"><span>Solved</span><span class="big">${RUSH.score}</span></div>
+      <div class="msg ${RUSH.record ? 'ok' : ''}">${RUSH.record ? '🏆 New best score!' : `Best score: ${RUSH.best}`}</div>
+      ${trail}<div class="row"><button id="rushgo">Play again</button></div>`;
     return;
   }
   $('pz').innerHTML = `<div class="stat"><span class="timer ${sec <= 20 ? 'low' : ''}">${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</span>
       <span class="big">${RUSH.score}</span></div>
-    <div class="stat"><span>Ход ${PZ?.color === 'black' ? 'чёрных' : 'белых'}</span>
+    <div class="stat"><span>${PZ?.color === 'black' ? 'Black' : 'White'} to move</span>
       <span class="strikes">${[0, 1, 2].map(i => i < RUSH.strikes ? '<b>✗</b>' : '✗').join('')}</span></div>
     ${trail}`;
 }
@@ -979,13 +971,17 @@ document.querySelector('.modes').onclick = e => { const b = e.target.closest('bu
 $('summary').onclick = e => {
   const t = e.target.closest('td.jump');
   if (!t) return;
-  // ход сделала сторона, которая НЕ ходит в позиции после него
+  // the move was made by the side NOT to move in the position after it
   const i = R.moves.findIndex(m => m.cls === t.dataset.k && m.fen.split(' ')[1] !== t.dataset.c);
   if (i >= 0) go(i + 1);
 };
 $('moves').onclick = e => { const t = e.target.closest('.mv'); if (t) go(+t.dataset.i); };
 flip(false);
-api('/api/me').then(me => { applyMe(me); start(); }, () => showAuth());
+api('/api/me').then(me => {
+  applyMe(me);
+  loadMyGames(0);
+  if (location.hash.length > 1) run(decodeURIComponent(location.hash.slice(1))); // /#https://lichess.org/xxxx
+}, e => status(e.message, true));
 document.querySelectorAll('.nav [data-d]').forEach(b => b.onclick = () => step(+b.dataset.d));
 $('comment').onclick = e => {
   if (e.target.id === 'tomain') return go(VAR.base);

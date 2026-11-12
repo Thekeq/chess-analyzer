@@ -63,12 +63,24 @@ def user():
     return db().execute("SELECT * FROM users WHERE id = ?", (session.get("uid"),)).fetchone()
 
 
-@app.before_request
-def require_login():
-    # the page, engine files and auth endpoints are public; every other API needs an account
-    if request.endpoint not in ("index", "static", "robots", "sitemap", "register", "login") and user() is None:
-        session.clear()
-        return jsonify(error="Войдите в аккаунт"), 401
+# Guests use everything; their progress lives in the signed session cookie and moves into the account on sign-up.
+GUEST = {"site": None, "nick": None, "puzzle_rating": 1200, "puzzle_games": 0, "rush_best": 0, "seen": "[]"}
+SEEN_KEEP = {True: 500, False: 60}  # recently played puzzles to skip: account / guest (the cookie must stay < 4 KB)
+
+
+def profile():
+    u = user()
+    return dict(u) if u else {**GUEST, **session.get("guest", {}), "username": None}
+
+
+def save_profile(**fields):
+    if user():
+        with db():
+            db().execute(f"UPDATE users SET {', '.join(k + ' = ?' for k in fields)} WHERE id = ?",
+                         (*fields.values(), session["uid"]))
+    else:
+        session.permanent = True
+        session["guest"] = {**session.get("guest", {}), **fields}
 
 
 def _credentials():
@@ -77,7 +89,10 @@ def _credentials():
 
 
 def _sign_in(uid):
+    pz = session.get("pz")
     session.clear()
+    if pz:
+        session["pz"] = pz
     session.permanent = True
     session["uid"] = uid
     return me()
@@ -87,15 +102,19 @@ def _sign_in(uid):
 def register():
     name, pw = _credentials()
     if not re.fullmatch(r"[A-Za-z0-9_-]{3,20}", name):
-        raise ValueError("Логин: 3–20 символов — латиница, цифры, _ и -")
+        raise ValueError("Username: 3–20 characters — letters, digits, _ and -")
     if len(pw) < 6:
-        raise ValueError("Пароль: минимум 6 символов")
+        raise ValueError("Password: at least 6 characters")
+    guest = profile()  # progress made as a guest carries over into the new account
     try:
         with db():
-            uid = db().execute("INSERT INTO users (username, pw_hash) VALUES (?, ?)",
-                               (name, generate_password_hash(pw))).lastrowid
+            uid = db().execute(
+                "INSERT INTO users (username, pw_hash, site, nick, puzzle_rating, puzzle_games, rush_best, seen)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (name, generate_password_hash(pw), guest["site"], guest["nick"], guest["puzzle_rating"],
+                 guest["puzzle_games"], guest["rush_best"], guest["seen"])).lastrowid
     except sqlite3.IntegrityError:
-        raise ValueError("Такой логин уже занят")
+        raise ValueError("This username is taken")
     return _sign_in(uid)
 
 
@@ -105,7 +124,7 @@ def login():
     row = db().execute("SELECT id, pw_hash FROM users WHERE username = ?", (name,)).fetchone()
     if row is None or not check_password_hash(row["pw_hash"], pw):
         time.sleep(1)  # slows down password guessing
-        raise ValueError("Неверный логин или пароль")
+        raise ValueError("Wrong username or password")
     return _sign_in(row["id"])
 
 
@@ -117,9 +136,9 @@ def logout():
 
 @app.get("/api/me")
 def me():
-    u = user()
-    return jsonify(username=u["username"], site=u["site"], nick=u["nick"], puzzle_rating=u["puzzle_rating"],
-                   puzzle_games=u["puzzle_games"], rush_best=u["rush_best"])
+    """Account or guest profile; username is null for guests."""
+    p = profile()
+    return jsonify({k: p[k] for k in ("username", "site", "nick", "puzzle_rating", "puzzle_games", "rush_best")})
 
 
 @app.post("/api/me")
@@ -128,9 +147,8 @@ def link_account():
     d = request.get_json(force=True)
     site, nick = d.get("site"), (d.get("nick") or "").strip()
     if nick and (site not in ("chesscom", "lichess") or not re.fullmatch(r"[A-Za-z0-9_-]{2,30}", nick)):
-        raise ValueError("Неверный ник")
-    with db():
-        db().execute("UPDATE users SET site = ?, nick = ? WHERE id = ?", (site if nick else None, nick or None, session["uid"]))
+        raise ValueError("Invalid username")
+    save_profile(site=site if nick else None, nick=nick or None)
     return me()
 
 
@@ -156,8 +174,8 @@ def bad_input(e):
 @app.errorhandler(urllib.error.URLError)
 def upstream(e):
     if getattr(e, "code", None) == 404:
-        return jsonify(error="Партия или игрок не найдены"), 404
-    return jsonify(error=f"Сайт с партией не ответил: {e.reason}"), 502
+        return jsonify(error="Game or player not found"), 404
+    return jsonify(error=f"The chess site didn't respond: {e.reason}"), 502
 
 
 @app.get("/")
@@ -183,7 +201,7 @@ def game():
     if is_url and (m := re.search(r"lichess\.org/(?:game/export/)?([A-Za-z0-9]{8})", text)):
         text = fetch(f"https://lichess.org/game/export/{m[1]}?clocks=false&evals=false", "application/x-chess-pgn")
     elif is_url and "chess.com/" in text:
-        raise ValueError("Chess.com не отдаёт партию по ссылке — введите ник ниже и выберите партию из списка")
+        raise ValueError("Chess.com doesn't share games by link — link your chess.com username and pick the game from \"My games\"")
     return jsonify(parse_game(text))
 
 
@@ -199,7 +217,7 @@ def judge():
     d = request.get_json(force=True)
     before, move = chess.Board(d["fen"]), chess.Move.from_uci(d["uci"])
     if move not in before.legal_moves:
-        raise ValueError("Нелегальный ход")
+        raise ValueError("Illegal move")
     after = before.copy(stack=False)
     after.push(move)
     score = _score(after, d.get("after"))
@@ -222,8 +240,8 @@ PUZZLE_BY_ID = {p["id"]: p for p in PUZZLES}
 
 @app.get("/api/puzzle")
 def puzzle():
-    """Random unseen puzzle near the user's puzzle rating, or near ?rating= with ?short=1 (1-2 moves, puzzle rush)."""
-    u = user()
+    """Random unseen puzzle near the player's puzzle rating, or near ?rating= with ?short=1 (1-2 moves, puzzle rush)."""
+    u = profile()
     rating = request.args.get("rating", u["puzzle_rating"], type=int)
     rating = min(max(rating, PUZZLE_RATINGS[0]), PUZZLE_RATINGS[-1])
     short, seen = request.args.get("short") == "1", set(json.loads(u["seen"]))
@@ -244,14 +262,13 @@ def puzzle_result():
     d = request.get_json(force=True)
     p = PUZZLE_BY_ID.get(d.get("id"))
     if p is None or session.pop("pz", None) != p["id"]:
-        raise ValueError("Результат этой задачи уже учтён")
-    u = user()
+        raise ValueError("This puzzle's result is already counted")
+    u = profile()
     expected = 1 / (1 + 10 ** ((int(p["rating"]) - u["puzzle_rating"]) / 400))
     delta = round((40 if u["puzzle_games"] < 30 else 20) * ((1 if d.get("win") else 0) - expected))  # faster at first
-    rating, seen = max(100, u["puzzle_rating"] + delta), (json.loads(u["seen"]) + [p["id"]])[-500:]
-    with db():
-        db().execute("UPDATE users SET puzzle_rating = ?, puzzle_games = puzzle_games + 1, seen = ? WHERE id = ?",
-                     (rating, json.dumps(seen), u["id"]))
+    rating = max(100, u["puzzle_rating"] + delta)
+    seen = (json.loads(u["seen"]) + [p["id"]])[-SEEN_KEEP[u["username"] is not None]:]
+    save_profile(puzzle_rating=rating, puzzle_games=u["puzzle_games"] + 1, seen=json.dumps(seen))
     return jsonify(delta=delta, rating=rating, games=u["puzzle_games"] + 1)
 
 
@@ -259,11 +276,10 @@ def puzzle_result():
 def rush_result():
     score = int(request.get_json(force=True).get("score"))
     if not 0 <= score <= 500:
-        raise ValueError("Неверный счёт")
-    best = user()["rush_best"]
+        raise ValueError("Invalid score")
+    best = profile()["rush_best"]
     if score > best:
-        with db():
-            db().execute("UPDATE users SET rush_best = ? WHERE id = ?", (score, session["uid"]))
+        save_profile(rush_best=score)
     return jsonify(best=max(score, best), record=score > best)
 
 

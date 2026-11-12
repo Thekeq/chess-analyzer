@@ -29,7 +29,7 @@ BOOK = _load_book()
 def read_game(pgn):
     game = chess.pgn.read_game(io.StringIO(pgn))
     if game is None or game.errors or game.next() is None:
-        raise ValueError("Не удалось прочитать PGN")
+        raise ValueError("Couldn't read the PGN")
     return game
 
 
@@ -152,7 +152,7 @@ def build_report(pgn, evals):
     board = game.board()
     moves = list(game.mainline_moves())
     if len(evals) != len(moves) + 1:
-        raise ValueError("Число оценок не совпадает с партией")
+        raise ValueError("The number of evaluations doesn't match the game")
 
     boards = [board.copy()]
     for m in moves:
