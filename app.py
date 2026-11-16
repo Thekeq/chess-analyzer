@@ -44,6 +44,7 @@ with sqlite3.connect(VAR / "app.db") as c:
         id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, pw_hash TEXT NOT NULL,
         site TEXT, nick TEXT, puzzle_rating INTEGER NOT NULL DEFAULT 1200, puzzle_games INTEGER NOT NULL DEFAULT 0,
         rush_best INTEGER NOT NULL DEFAULT 0, seen TEXT NOT NULL DEFAULT '[]')""")
+    c.execute("CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0)")
 
 
 def db():
@@ -57,6 +58,19 @@ def db():
 def close_db(_):
     if (conn := g.pop("db", None)) is not None:
         conn.close()
+
+
+def bump(name):
+    """Site-wide activity counter (games analysed, puzzles played, rush runs), guests included."""
+    with db():
+        db().execute("INSERT INTO counters (name, n) VALUES (?, 1) ON CONFLICT(name) DO UPDATE SET n = n + 1", (name,))
+
+
+@app.get("/api/stats")
+def stats():
+    n = {r["name"]: r["n"] for r in db().execute("SELECT name, n FROM counters")}
+    users = db().execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    return jsonify(users=users, games=n.get("games", 0), puzzles=n.get("puzzles", 0), rush=n.get("rush", 0))
 
 
 def user():
@@ -213,7 +227,9 @@ def game():
 @app.post("/api/report")
 def report():
     data = request.get_json(force=True)
-    return jsonify(build_report(data["pgn"], data["evals"]))
+    result = build_report(data["pgn"], data["evals"])
+    bump("games")
+    return jsonify(result)
 
 
 @app.post("/api/judge")
@@ -274,6 +290,7 @@ def puzzle_result():
     rating = max(100, u["puzzle_rating"] + delta)
     seen = (json.loads(u["seen"]) + [p["id"]])[-SEEN_KEEP[u["username"] is not None]:]
     save_profile(puzzle_rating=rating, puzzle_games=u["puzzle_games"] + 1, seen=json.dumps(seen))
+    bump("puzzles")
     return jsonify(delta=delta, rating=rating, games=u["puzzle_games"] + 1)
 
 
@@ -285,6 +302,7 @@ def rush_result():
     best = profile()["rush_best"]
     if score > best:
         save_profile(rush_best=score)
+    bump("rush")
     return jsonify(best=max(score, best), record=score > best)
 
 

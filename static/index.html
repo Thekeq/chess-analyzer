@@ -224,6 +224,7 @@
   #autherr { color: var(--danger); font-size: 13px; } #autherr:empty { display: none; }
   .about { max-width: 760px; margin: 0 auto; padding: 8px 24px 40px; color: var(--muted); font-size: 13px; text-align: center; }
   .about b { color: var(--text); }
+  .stats { font: 600 13px var(--mono); color: var(--text); margin-bottom: 4px; } .stats:empty { display: none; }
   .linkbtn { background: none; height: auto; padding: 0; color: var(--accent-hi); font-weight: 600; }
   .linkbtn:hover:not(:disabled) { background: none; text-decoration: underline; }
 
@@ -344,6 +345,7 @@
   </aside>
 </main>
 <footer class="about">
+  <p id="stats" class="stats"></p>
   <p><b>ChessTrainer</b> is a free chess trainer. Analyse your chess.com and lichess games with Stockfish 17 — every move
     is graded from Brilliant to Blunder, with accuracy for both players. Solve rated puzzles from real games (400 to 2800)
     that get harder as you improve, or race the clock in Puzzle Rush: three minutes, three strikes.</p>
@@ -997,6 +999,10 @@ api('/api/me').then(me => {
   loadMyGames(0);
   if (location.hash.length > 1) run(decodeURIComponent(location.hash.slice(1))); // /#https://lichess.org/xxxx
 }, e => status(e.message, true));
+api('/api/stats').then(st => {
+  const n = (v, word) => `${v.toLocaleString('en-US')} ${word}${v === 1 ? '' : 's'}`;
+  $('stats').textContent = [n(st.users, 'player'), n(st.games, 'game') + ' analysed', n(st.puzzles, 'puzzle') + ' played'].join(' · ');
+}, () => {});
 document.querySelectorAll('.nav [data-d]').forEach(b => b.onclick = () => step(+b.dataset.d));
 $('comment').onclick = e => {
   if (e.target.id === 'tomain') return go(VAR.base);
