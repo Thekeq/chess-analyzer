@@ -45,6 +45,8 @@ with sqlite3.connect(VAR / "app.db") as c:
         site TEXT, nick TEXT, puzzle_rating INTEGER NOT NULL DEFAULT 1200, puzzle_games INTEGER NOT NULL DEFAULT 0,
         rush_best INTEGER NOT NULL DEFAULT 0, seen TEXT NOT NULL DEFAULT '[]')""")
     c.execute("CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0)")
+    if "created_at" not in {r[1] for r in c.execute("PRAGMA table_info(users)")}:  # added later; older rows stay NULL
+        c.execute("ALTER TABLE users ADD COLUMN created_at TEXT")
 
 
 def db():
@@ -123,8 +125,8 @@ def register():
     try:
         with db():
             uid = db().execute(
-                "INSERT INTO users (username, pw_hash, site, nick, puzzle_rating, puzzle_games, rush_best, seen)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO users (username, pw_hash, site, nick, puzzle_rating, puzzle_games, rush_best, seen, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
                 (name, generate_password_hash(pw), guest["site"], guest["nick"], guest["puzzle_rating"],
                  guest["puzzle_games"], guest["rush_best"], guest["seen"])).lastrowid
     except sqlite3.IntegrityError:
